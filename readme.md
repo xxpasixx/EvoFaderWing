@@ -1,19 +1,29 @@
 # EvoFaderWing - [Wiki](https://github.com/stagehandshawn/EvoFaderWing/wiki)
 
-**Author:** ShawnR  
-**Contact:** [stagehandshawn@gmail.com](mailto:stagehandshawn@gmail.com)
-
-![FaderWing Image](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/images/faderwing.jpg)
-
-[![Watch the demo video](https://img.youtube.com/vi/fbl81pGS5f4/0.jpg)](https://youtu.be/fbl81pGS5f4)
-
----
-
-## Overview
-
-OSC control of grandMA3 faders with motorized feedback and backlit faders, 20 encoders, and 40 standard exec buttons.
-
-> **Note:** This is a work in progress (WIP) but is fully functional. This is not a complete guide yet, as I just do not have the time to make one. However I have created a Bill of Materials
+<table width="100%">
+  <tr>
+    <td width="70%">
+      <table width="100%">
+        <tr>
+          <td align="left">
+            <strong>Author:</strong> ShawnR
+          </td>
+          <td align="right">
+            <strong>Contact:</strong> <a href="mailto:stagehandshawn@gmail.com">stagehandshawn@gmail.com</a>
+          </td>
+        </tr>
+      </table>
+      <br>
+      OSC control of grandMA3 faders with motorized feedback, backlit faders (follows appearances), 20 encoders, and 40 standard exec buttons.
+      <br><br><blockquote>
+        <strong>Note:</strong> This is a work in progress (WIP) but is fully functional. This is not a complete guide yet, as I just do not have the time to make one. However I have created a Bill of Materials
+      </blockquote>
+    </td>
+    <td width="30%" align="right" valign="top">
+      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_left_front.jpg" alt="faderwing" width="350">
+    </td>
+  </tr>
+</table>
 
 [Bill Of Materials](https://github.com/stagehandshawn/EvoFaderWing/wiki/Bill-of-materials)
 
@@ -21,10 +31,33 @@ OSC control of grandMA3 faders with motorized feedback and backlit faders, 20 en
 
 Any questions can be sent to me at [stagehandshawn@gmail.com](mailto:stagehandshawn@gmail.com). I'll help when I can.
 
-There are pinouts in the `images` and/or `docs` folders. These, along with the pictures, should give you an idea of how you'll want to route wires.
-Image `00_Connections` gives an idea of the layout.
+---
+## Project Images
 
-I have not coded in years and was never great at it, so I leaned on AI to make this happen. The code could use some work, I'm sure.
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_top1.jpg" alt="faderwing top" width="100%">
+    </td>
+    <td width="50%">
+      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_right.jpg" alt="faderwing right side" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_back.jpg" alt="faderwing back" width="100%">
+    </td>
+    <td width="50%">
+      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_elec_bay.jpg" alt="electronics bay" width="100%">
+    </td>
+  </tr>
+</table>
+
+**Watch the demo video**
+
+[![Watch the demo video](https://img.youtube.com/vi/fbl81pGS5f4/0.jpg)](https://youtu.be/fbl81pGS5f4)
+
+---
 
 ---
 
