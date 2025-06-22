@@ -55,7 +55,7 @@ Any questions can be sent to me at [stagehandshawn@gmail.com](mailto:stagehandsh
 
 **Watch the demo video**
 
-[![Watch the demo video](https://img.youtube.com/vi/fbl81pGS5f4/0.jpg)](https://youtu.be/fbl81pGS5f4)
+[![Watch the demo video](https://img.youtube.com/vi/cR3AajQKoAo/0.jpg)](https://www.youtube.com/watch?v=cR3AajQKoAo)
 
 ---
 
