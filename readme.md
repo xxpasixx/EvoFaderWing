@@ -80,7 +80,8 @@ The Lua script `/lua/EvoFaderWingOSC.lua` will poll executors and send updates t
 - You will need to create 2 OSC connections
   - The first will be for incoming messages and will be set to recieve.
   - The second will be from outgoing messages and will be set to send.
-
   - Both will need to be set to a fader range of 100
+
+![OscSettings](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/OscSettings.png)
 
 More to come. Thank you for checking out my project!
