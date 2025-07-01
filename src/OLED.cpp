@@ -19,8 +19,9 @@ OLED::OLED() {
 
 OLED::~OLED() {
     if (oledDisplay) {
-        delete oledDisplay;
-        oledDisplay = nullptr;
+        //delete oledDisplay;
+        //oledDisplay = nullptr;
+        oledDisplay.reset();   // New method
     }
 }
 
@@ -46,13 +47,16 @@ bool OLED::begin() {
     }
     
     // Create Adafruit display object with detected address
-    oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+    //oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+    oledDisplay = std::make_unique<Adafruit_SSD1306>(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);   // New method
     
     // Initialize the display using Adafruit library
     if (!oledDisplay->begin(SSD1306_SWITCHCAPVCC, i2cAddress)) {
         debugPrint("[OLED] ERR: alloc failed");
-        delete oledDisplay;
-        oledDisplay = nullptr;
+        //delete oledDisplay;
+        //oledDisplay = nullptr;
+        oledDisplay.reset();  // New Method
         return false;
     }
     
@@ -75,13 +79,15 @@ bool OLED::begin(uint8_t address) {
         i2cAddress = address;
         
         // Create Adafruit display object
-        oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+        //oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+        oledDisplay = std::make_unique<Adafruit_SSD1306>(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);   // New method
         
         // Initialize the display using Adafruit library
         if (!oledDisplay->begin(SSD1306_SWITCHCAPVCC, i2cAddress)) {
             debugPrint("[OLED] ERR: alloc failed");
-            delete oledDisplay;
-            oledDisplay = nullptr;
+            //delete oledDisplay;
+            //oledDisplay = nullptr;
+            oledDisplay.reset();  //New method
             return false;
         }
         
@@ -383,7 +389,8 @@ void OLED::setupOLED() {
 
 Adafruit_SSD1306* OLED::getDisplay() {
     // Get direct access to Adafruit display object for advanced use
-    return oledDisplay;
+    //return oledDisplay;
+    return oledDisplay.get();
 }
 
 // === Private Helper Functions ===

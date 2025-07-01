@@ -17,6 +17,7 @@
 #include "Utils.h"
 #include "i2cPolling.h"
 #include "OLED.h"
+#include "Keysend.h"
 
 using namespace qindesign::network;
 using qindesign::osc::LiteOSCParser;
@@ -73,6 +74,7 @@ void setup() {
   // Start NeoPixels
   setupNeoPixels();
 
+  initKeyboard();
   
   //Network reset check
   resetCheckStartTime = millis();

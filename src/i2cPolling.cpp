@@ -11,6 +11,7 @@
 #include "Utils.h"
 #include "EEPROMStorage.h"
 #include "NetworkOSC.h"
+#include "Keysend.h"
 
 // === I2C Slave Addresses ===
 #define I2C_ADDR_KEYBOARD  0x10  // Keyboard matrix ATmega - sends keypress data
@@ -273,6 +274,13 @@ void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
     return;
   }
   
+  // Send keypress will add option for osc or keypress later for now we are testing with both
+  if (state) {
+    sendKeyPress(keyNumber);
+  } else {
+    sendKeyRelease(keyNumber);
+  }
+
   // Create the OSC address
   char oscAddress[32];
   snprintf(oscAddress, sizeof(oscAddress), "/Key%d", keyNumber);
