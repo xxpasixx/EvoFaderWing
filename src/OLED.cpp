@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <IPAddress.h>
+#include "Config.h"
 
 // === Constructor and Destructor ===
 
@@ -356,7 +357,7 @@ void OLED::setupOLED() {
         
         // Show welcome screen
         clear();
-        showHeader("Fader Wing");
+        showHeader("Fader Wing " SW_VERSION);
         
         setCursor(0, 20);
         setTextSize(TEXT_SIZE_SMALL);

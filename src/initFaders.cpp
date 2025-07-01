@@ -18,16 +18,11 @@ void initializeFaders() {
     faders[i].pwmPin = PWM_PINS[i];
     faders[i].dirPin1 = DIR_PINS1[i];
     faders[i].dirPin2 = DIR_PINS2[i];
-    faders[i].minVal = 20;    //Keep default range small to avoid not being able to hit 0 and 100 percent
-    faders[i].maxVal = 1000;  // we might lose a little precision but its better
+    faders[i].minVal = 5;    //Keep default range small to avoid not being able to hit 0 and 100 percent
+    faders[i].maxVal = 250;  // we might lose a little precision but its better
     faders[i].setpoint = 0;
-    faders[i].current = 0;
-    faders[i].motorOutput = 0;
-    faders[i].lastMotorOutput = 0;
     faders[i].lastReportedValue = -1;
-    faders[i].lastMoveTime = 0;
     faders[i].lastOscSendTime = 0;
-    faders[i].suppressOSCOut = false;
     faders[i].oscID = OSC_IDS[i];
     
     
@@ -61,6 +56,7 @@ void initializeFaders() {
 void configureFaderPins() {
   // Configure pins for each fader
   
+  analogReadResolution(8);  // Set resolution to 8bit it will return 0-255
   analogReadAveraging(16);  // Sets the ADC to always average 16 samples so we dont need to smooth reading ourselves
 
   for (int i = 0; i < NUM_FADERS; i++) {
@@ -68,9 +64,8 @@ void configureFaderPins() {
     pinMode(f.pwmPin, OUTPUT);
     pinMode(f.dirPin1, OUTPUT);
     pinMode(f.dirPin2, OUTPUT);
-    
-
-    f.setpoint = 50;  // NEW - OSC value set faders to center for testing later will be 0 value
+  
+    f.setpoint = 50;  // Set faders to center point
     
     // Initialize state
     f.touched = false;
@@ -103,7 +98,7 @@ void calibrateFaders() {
       // Check for timeout (10 seconds)
       if ((millis() - startTime) > calibrationTimeout) {
         debugPrintf("ERROR: Fader %d MAX calibration timed out! Using default value of 1023.\n", i);
-        f.maxVal = 1000;  // Use default max value
+        f.maxVal = 250;  // Use default max value
         calibrationSuccess = false;
         break;  // Exit the loop
       }
@@ -119,7 +114,7 @@ void calibrateFaders() {
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
         calibrationSuccess = true;
-        f.maxVal = last - 10;  //subtract a litle value to make sure we can get to top
+        f.maxVal = last - 2;  //subtract a litle value to create a dead zone at top (sometimes required to reach)
       }
     }
     
@@ -141,7 +136,7 @@ void calibrateFaders() {
       // Check for timeout 
       if ((millis() - startTime) > calibrationTimeout) {
         debugPrintf("ERROR: Fader %d MIN calibration timed out! Using default value of 0.\n", i);
-        f.minVal = 20;  // Use default min value
+        f.minVal = 5;  // Use default min value
         minCalibrationSuccess = false;
         break;  // Exit the loop
       }
@@ -157,7 +152,7 @@ void calibrateFaders() {
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
         minCalibrationSuccess = true;
-        f.minVal = last + 10;  //Add a litle value to make sure we can get to bottom
+        f.minVal = last + 3;  //Add a litle value to make a deadzone at the bottom
       }
     }
     
@@ -177,8 +172,8 @@ void calibrateFaders() {
     if (f.minVal >= f.maxVal || (f.maxVal - f.minVal) < 100) {
       debugPrintf("ERROR: Fader %d has invalid range! Min=%d, Max=%d. Using defaults.\n", 
                   i, f.minVal, f.maxVal);
-      f.minVal = 20;
-      f.maxVal = 1000;
+      f.minVal = 5;
+      f.maxVal = 250;
     }
     
     

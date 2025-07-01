@@ -3,12 +3,10 @@
 
 // Teensy 4.1
 
-
 #include <Arduino.h>
 #include <QNEthernet.h>
 #include <LiteOSCParser.h>
 
-// Include all our modular components
 #include "Config.h"
 #include "EEPROMStorage.h"
 #include "TouchSensor.h"
@@ -75,8 +73,6 @@ void setup() {
   // Start NeoPixels
   setupNeoPixels();
 
-  // Check if we need to run calibration
-  checkCalibration();  
   
   //Network reset check
   resetCheckStartTime = millis();
@@ -92,7 +88,7 @@ void loop() {
   }
   
 // Process OSC messages
-  handleOscMessage();
+  handleIncomingOsc();
 
   // Check for manual fader movement
   handleFaders();
@@ -123,16 +119,14 @@ void loop() {
   
   checkSerialForReboot();
 
-  yield(); // Let the Teensy do background tasks
+  //yield(); // i don't think we need this
 }
 
 
 // #### oled display functions ####
 
 void displayIPAddress(){
-
   display.clear();
-  // Show IP address
   currentIP = Ethernet.localIP();
   display.showIPAddress(currentIP,netConfig.receivePort,netConfig.sendToIP,netConfig.sendPort);
 

@@ -9,35 +9,6 @@
 //================================
 // MOTOR CONTROL
 //================================
-void driveMotor(Fader& f, int direction) {
-  if (direction == 0) {
-    // Stop the motor
-    digitalWrite(f.dirPin1, LOW);
-    digitalWrite(f.dirPin2, LOW);
-    analogWrite(f.pwmPin, 0);
-    return;
-  }
-  
-  // Set direction pins
-  if (direction > 0) {
-    // Move up/forward
-    digitalWrite(f.dirPin1, HIGH);
-    digitalWrite(f.dirPin2, LOW);
-  } else {
-    // Move down/backward
-    digitalWrite(f.dirPin1, LOW);
-    digitalWrite(f.dirPin2, HIGH);
-  }
-  
-  // Apply PWM speed
-  analogWrite(f.pwmPin, Fconfig.defaultPwm);
-  
-  if (debugMode) {
-    debugPrintf("Fader %d: Motor PWM: %d, Dir: %s, Setpoint: %d\n", 
-               f.oscID, Fconfig.defaultPwm, direction > 0 ? "UP" : "DOWN", f.setpoint);
-  }
-}
-
 
 void driveMotorWithPWM(Fader& f, int direction, int pwmValue) {
   if (direction == 0) {
@@ -116,11 +87,9 @@ void moveAllFadersToSetpoints() {
       // Read current position as OSC value
       int currentOscValue = readFadertoOSC(f);
       
-      // Setpoint is already in OSC units (0-100)
-      int targetOscValue = (int)f.setpoint;
       
       // Calculate difference in OSC units
-      int difference = targetOscValue - currentOscValue;
+      int difference = f.setpoint - currentOscValue;
       
       // Check if we need to move this fader (using a smaller tolerance for OSC units) IF NOT TOUCHING IT
       if (abs(difference) > Fconfig.targetTolerance && !f.touched) {
@@ -140,7 +109,7 @@ void moveAllFadersToSetpoints() {
 
         if (debugMode) {
           debugPrintf("Fader %d: Current OSC: %d, Target OSC: %d, Diff: %d\n", 
-                     f.oscID, currentOscValue, targetOscValue, difference);
+                     f.oscID, currentOscValue, f.setpoint, difference);
         }
 
         } else {
@@ -154,10 +123,10 @@ void moveAllFadersToSetpoints() {
     delay(5);
     
     // Optional: Add timeout protection to prevent infinite loops
-    if (millis() - moveStartTime > 2000) { // 5 second timeout
+    if (millis() - moveStartTime > FADER_MOVE_TIMEOUT) { // 2 second timeout
       // Stop all motors if we've been trying for too long
       for (int i = 0; i < NUM_FADERS; i++) {
-        driveMotor(faders[i], 0);
+        driveMotorWithPWM(faders[i], 0, 0);
       }
       if (debugMode) {
         debugPrintf("Fader movement timeout - stopping all motors\n");
@@ -206,9 +175,9 @@ void handleFaders() {
         
         // If forcesend because fast move to top or bottom then ignore rate limiting
         if (forceSend) {
-          sendOscUpdate(f, currentOscValue, true);
+          sendFaderOsc(f, currentOscValue, true);
         } else {
-          sendOscUpdate(f, currentOscValue, false);
+          sendFaderOsc(f, currentOscValue, false);
         }
         
         f.setpoint = currentOscValue;
@@ -229,7 +198,7 @@ int readFadertoOSC(Fader& f) {
   int analogValue = analogRead(f.analogPin);
 
   // Clamp near-bottom analog values to force OSC = 0
-  if (analogValue <= f.minVal + 15) {
+  if (analogValue <= f.minVal + 4) {
     if (debugMode) {
       //debugPrintf("Fader %d: Clamped to 0 (analog=%d, minVal=%d)\n", f.oscID, analogValue, f.minVal);
     }
@@ -237,7 +206,7 @@ int readFadertoOSC(Fader& f) {
   }
 
   // Clamp near-top analog values to force OSC = 100
-  if (analogValue >= f.maxVal - 15) {
+  if (analogValue >= f.maxVal - 4) {
     if (debugMode) {
       //debugPrintf("Fader %d: Clamped to 100 (analog=%d, maxVal=%d)\n", f.oscID, analogValue, f.maxVal);
     }
@@ -247,3 +216,39 @@ int readFadertoOSC(Fader& f) {
   int oscValue = map(analogValue, f.minVal, f.maxVal, 0, 100);
   return constrain(oscValue, 0, 100);
 }
+
+
+
+
+void sendFaderOsc(Fader& f, int value, bool force) {
+  unsigned long now = millis();
+
+  // Only send if value changed significantly or enough time passed or force flag is set
+  if (force || (abs(value - f.lastSentOscValue) >= Fconfig.sendTolerance && 
+      now - f.lastOscSendTime > OSC_RATE_LIMIT)) {
+    
+    char oscAddress[32];
+    snprintf(oscAddress, sizeof(oscAddress), "/Page%d/Fader%d", currentOSCPage, f.oscID);
+    
+    debugPrintf("Sending OSC update for Fader %d on Page %d → value: %d\n", f.oscID, currentOSCPage, value);
+    
+    // Use the existing sendOscMessage function instead of manual buffer building
+    sendOscMessage(oscAddress, ",i", &value);
+    
+    f.lastOscSendTime = now;
+    f.lastSentOscValue = value;
+  }
+}
+
+
+// Returns the index of the fader with the given OSC ID, or -1 if not found
+int getFaderIndexFromID(int id) {
+  for (int i = 0; i < NUM_FADERS; i++) {
+    if (faders[i].oscID == id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+

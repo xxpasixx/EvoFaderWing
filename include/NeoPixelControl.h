@@ -21,5 +21,6 @@ void setupNeoPixels();
 void updateNeoPixels();
 void updateBaseBrightnessPixels();
 
+uint32_t getScaledColor(const Fader& fader);
 
 #endif // NEOPIXEL_CONTROL_H

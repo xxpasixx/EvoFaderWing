@@ -4,11 +4,11 @@
 
 #include <Arduino.h>
 #include <IPAddress.h>
-#include <PID_v1.h>
 
 //================================
 // HARDWARE CONFIGURATION
 //================================
+#define SW_VERSION      "0.2"
 
 // Fader configuration
 #define NUM_FADERS      10       // Total number of motorized faders
@@ -18,9 +18,10 @@
 #define DEFAULT_PWM     100      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100
 #define CALIB_PWM       80      // Reduced motor speed during auto-calibration phase
 #define MIN_PWM         45       // Minimum PWM to overcome motor inertia
+#define FADER_MOVE_TIMEOUT     2000   //Time in MS a fader must not be moving before force stopped
 
 // Fader position tolerances
-#define TARGET_TOLERANCE 1      // OSC VALUE How close (in analog units) fader must be to setpoint to consider "done"
+#define TARGET_TOLERANCE 1      // OSC VALUE How close the fader must be to setpoint to consider "done"
 #define SEND_TOLERANCE   2       // Also osc value now
 
 // Calibration settings
@@ -68,7 +69,7 @@ extern const uint16_t OSC_IDS[NUM_FADERS];
 //================================
 constexpr uint32_t kDHCPTimeout = 15000;  // Timeout for DHCP in milliseconds
 constexpr uint16_t kOSCPort = 8000;       // Default OSC port
-constexpr char kServiceName[] = "evofaderwing"; // mDNS service name
+constexpr char kServiceName[] = "evofaderwing"; // mDNS service name and Hostname
 
 // Network configuration structure
 struct NetworkConfig {
@@ -118,18 +119,13 @@ struct Fader {
   int minVal;               // Calibrated analog min
   int maxVal;               // Calibrated analog max
 
-  double setpoint;          // Target position
-  double current;           // Current analog reading
+  uint8_t setpoint;          // Target position
 
-  double motorOutput;       // PID output
-  double lastMotorOutput;   // Last motor output for velocity limiting
+  uint8_t lastReportedValue;    // Last value printed or sent
+  uint8_t lastSentOscValue;     // Last value sent via OSC
 
-
-  int lastReportedValue;    // Last value printed or sent
-  unsigned long lastMoveTime; // Time of last movement
   unsigned long lastOscSendTime; // Time of last OSC message
-  int lastSentOscValue;     // Last value sent via OSC
-  bool suppressOSCOut;     // Suppress OSC out or Not
+
   uint16_t oscID;           // OSC ID like 201 for /Page2/Fader201
   
 

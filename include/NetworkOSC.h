@@ -22,27 +22,22 @@ extern EthernetUDP udp;
 
 // Network setup and management
 void setupNetwork();
-
-// OSC message handling
-void handleOscPacket(const char *address, int value);
-void sendOscUpdate(Fader& f, int value, bool force = false);
-void handleColorOsc(const char *address, const char *colorString);
-
 void restartUDP();
 
-void handleOscMovement(const char *address, int value);
-void handleOscMessage();
 
+
+// OSC message handling
+void sendFaderOsc(Fader& f, int value, bool force = false);
+void handleIncomingOsc();
 void sendOscMessage(const char* address, const char* typeTag, const void* value);
 
 // Page update
 void handlePageUpdate(const char *address, int value);
 
-// Color parsing (used by both NetworkOSC and NeoPixelControl)
-void parseColorValues(const char *colorString, Fader& f);
 
 // OSC utility functions
 void printOSC(Print &out, const uint8_t *b, int len);
 bool isBundleStart(const uint8_t *buf, size_t len);
+void parseDualColorValues(const char *colorString, Fader& f);
 
 #endif // NETWORK_OSC_H

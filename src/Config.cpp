@@ -59,6 +59,9 @@ NetworkConfig netConfig = {
   true                             // useDHCP (fallback to static if false)
 };
 
+// Network reset check
+bool checkForReset = true;
+unsigned long resetCheckStartTime = 0;
 
 
 //================================
@@ -77,11 +80,6 @@ NetworkConfig netConfig = {
 int autoCalibrationMode = 2;     // 0 = Off, 1 = Normal, 2 = Conservative
 uint8_t touchThreshold = 12;     // Higher = less sensitive
 uint8_t releaseThreshold = 6;    // Lower = harder to release
-
-
-//Network reset check
-bool checkForReset = true;
-unsigned long resetCheckStartTime = 0;
 
 
 // Page Tracking

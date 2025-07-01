@@ -16,11 +16,11 @@ void handleFaders();
 
 
 //Fader movement
-void driveMotor(Fader& f, int direction);
-
 void setFaderSetpoint(int faderIndex, int oscValue);
-int readFadertoOSC(Fader& f);
-
 void moveAllFadersToSetpoints();
+
+
+int readFadertoOSC(Fader& f);
+int getFaderIndexFromID(int id);
 
 #endif // FADER_CONTROL_H

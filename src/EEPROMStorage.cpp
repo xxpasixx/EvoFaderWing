@@ -233,12 +233,16 @@ void resetToDefaults() {
   Fconfig.calibratePwm = CALIB_PWM;
   Fconfig.targetTolerance = TARGET_TOLERANCE;
   Fconfig.sendTolerance = SEND_TOLERANCE;
-  
+  Fconfig.baseBrightness = 5;
+  Fconfig.touchedBrightness = 40;
+  Fconfig.fadeTime = 1000;
+  Fconfig.serialDebug = false;
+
   
   // Reset touch settings
-  autoCalibrationMode = 2; // Default value (conservative)
-  touchThreshold = 12;     // Default value
-  releaseThreshold = 6;    // Default value
+  autoCalibrationMode = 2;
+  touchThreshold = 12;
+  releaseThreshold = 6;
   
   setAutoTouchCalibration(autoCalibrationMode);
   manualTouchCalibration();

@@ -518,6 +518,7 @@ void handleFaderSettings(String request) {
   String sendToleranceStr = getParam(request, "sendTolerance");
   String baseBrightnessStr = getParam(request, "baseBrightness");
   String touchedBrightnessStr = getParam(request, "touchedBrightness");
+  String fadeTimeStr = getParam(request, "fadeTime");
   
   // Validate and update using constrainParam
   if (minPwmStr.length() > 0) {
@@ -553,6 +554,12 @@ void handleFaderSettings(String request) {
     debugPrintf("Touched Brightness saved: %d\n", Fconfig.touchedBrightness);
   }
   
+  if (fadeTimeStr.length() > 0) {
+    int fadeTime = fadeTimeStr.toInt();
+    Fconfig.fadeTime = constrainParam(fadeTime, 0, 10000, Fconfig.fadeTime);
+    debugPrintf("Fade Time saved: %d\n", Fconfig.fadeTime);
+  }
+
   // Additional logical validation
   if (Fconfig.minPwm > Fconfig.defaultPwm) {
     debugPrint("Warning: Min PWM is greater than Default PWM, swapping values");
@@ -934,6 +941,14 @@ waitForWriteSpace();
   client.print(Fconfig.touchedBrightness);
   client.println("' min='0' max='255'>");
   client.println("<p class='help-text'>LED brightness when fader is touched (0-255)</p>");
+  client.println("</div>");
+
+  client.println("<div class='form-group'>");
+  client.println("<label>Fade Time</label>");
+  client.print("<input type='number' name='fadeTime' value='");
+  client.print(Fconfig.fadeTime);
+  client.println("' min='0' max='10000'>");
+  client.println("<p class='help-text'>Time in ms that the leds will fade</p>");
   client.println("</div>");
   
   client.println("<button type='submit' class='btn btn-primary btn-block'>Save Fader Settings</button>");
