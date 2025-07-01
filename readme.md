@@ -16,7 +16,7 @@
       <br>
       OSC control of grandMA3 faders with motorized feedback, backlit faders (follows appearances), 20 encoders, and 40 standard exec buttons.
       <br><br><blockquote>
-        <strong>Note:</strong> This is a work in progress (WIP) but is fully functional. This is not a complete guide yet, as I just do not have the time to make one. However I have created a Bill of Materials
+        <strong>Note:</strong> This Guide is a work in progress but EvoFaderWing is fully functional. I continue to work on the repo as time permits.
       </blockquote>
     </td>
     <td width="30%" align="right" valign="top">
