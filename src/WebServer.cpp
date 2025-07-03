@@ -768,7 +768,7 @@ void handleOSCSettings(String request) {
   saveNetworkConfig();
   saveFaderConfig();  // NEW: Save fader config for sendKeystrokes setting
     
-  restartUDP();
+//  restartUDP(); we do this inside of savenetworkconfig now
 
   debugPrint("OSC settings saved successfully");
 }

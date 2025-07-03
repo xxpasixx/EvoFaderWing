@@ -7,7 +7,7 @@
 #include "NeoPixelControl.h"
 
 
-const unsigned long RETRY_INTERVAL = 1000;  // 5 seconds before retry
+
 bool FaderRetryPending = false;
 unsigned long FaderRetryTime = 0;
 

@@ -124,6 +124,7 @@ void saveNetworkConfig() {
   if (oldConfig.useDHCP != netConfig.useDHCP) configChanged = true;
 
   if (configChanged) {
+    restartUDP();
     Ethernet.end();
     setupNetwork();  // includes udp.begin(newReceivePort)
   }
