@@ -284,6 +284,11 @@ void resetNetworkDefaults() {
 //================================
 
 void dumpEepromConfig() {
+
+  bool currentDebugMode = debugMode;
+
+  debugMode = true;
+
   debugPrint("\n===== EEPROM CONFIGURATION DUMP =====\n");
   
   // Check calibration data
@@ -379,4 +384,9 @@ void dumpEepromConfig() {
 
   
   debugPrint("\n===== END OF EEPROM DUMP =====\n");
+
+  debugMode = currentDebugMode;
+
+  displayIPAddress();
+
 }

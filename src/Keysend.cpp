@@ -163,21 +163,21 @@ void sendKeyTap(const String& keyID, unsigned long duration = 50) {
 }
 
 // Update all key states - call this in loop to handle held keys
-void updateKeyStates() {
-    unsigned long currentTime = millis();
+// void updateKeyStates() {
+//     unsigned long currentTime = millis();
     
-    // This function can be used to implement auto-repeat or timeout logic
-    // For now, it just maintains the state tracking
-    for (int i = 0; i < activeKeyCount; i++) {
-        if (keyStates[i].isPressed) {
-            // Key is being held - you could add auto-repeat logic here if needed
-            // For example:
-            // if (currentTime - keyStates[i].lastUpdate > AUTO_REPEAT_DELAY) {
-            //     // Trigger repeat action
-            // }
-        }
-    }
-}
+//     // This function can be used to implement auto-repeat or timeout logic
+//     // For now, it just maintains the state tracking
+//     for (int i = 0; i < activeKeyCount; i++) {
+//         if (keyStates[i].isPressed) {
+//             // Key is being held - you could add auto-repeat logic here if needed
+//             // For example:
+//             // if (currentTime - keyStates[i].lastUpdate > AUTO_REPEAT_DELAY) {
+//             //     // Trigger repeat action
+//             // }
+//         }
+//     }
+// }
 
 // Release all keys (useful for cleanup or panic button)
 void releaseAllKeys() {
@@ -193,20 +193,20 @@ void releaseAllKeys() {
     Keyboard.releaseAll(); // Extra safety
 }
 
-// Get debug info about a key
-String getKeyInfo(const String& keyID) {
-    int executorIndex = keyID.toInt();
+// // Get debug info about a key
+// String getKeyInfo(const String& keyID) {
+//     int executorIndex = keyID.toInt();
     
-    for (int i = 0; i < KEY_MAP_SIZE; i++) {
-        if (keyMap[i].executorIndex == executorIndex) {
-            return String("Exec ") + String(executorIndex) + 
-                   " -> " + String(keyMap[i].keyName) + 
-                   " (code: " + String(keyMap[i].keyCode) + ")";
-        }
-    }
+//     for (int i = 0; i < KEY_MAP_SIZE; i++) {
+//         if (keyMap[i].executorIndex == executorIndex) {
+//             return String("Exec ") + String(executorIndex) + 
+//                    " -> " + String(keyMap[i].keyName) + 
+//                    " (code: " + String(keyMap[i].keyCode) + ")";
+//         }
+//     }
     
-    return "Key not mapped: " + keyID;
-}
+//     return "Key not mapped: " + keyID;
+// }
 
 // Example usage in your main code:
 /*
