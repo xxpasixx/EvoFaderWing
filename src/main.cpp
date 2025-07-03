@@ -34,7 +34,9 @@ IPAddress currentIP;      // define currentIP
 //================================
 
 void setup() {
-  // Serial setup
+  // Start up keyboard first to make sure of enum in windows
+  initKeyboard();
+
   Serial.begin(SERIAL_BAUD);
   while (!Serial && millis() < 4000) {}
   
@@ -74,7 +76,6 @@ void setup() {
   // Start NeoPixels
   setupNeoPixels();
 
-  initKeyboard();
   
   //Network reset check
   resetCheckStartTime = millis();
@@ -121,7 +122,6 @@ void loop() {
   
   checkSerialForReboot();
 
-  //yield(); // i don't think we need this
 }
 
 
