@@ -55,7 +55,7 @@ NetworkConfig netConfig = {
   IPAddress(192, 168, 0, 169),     // staticIP
   IPAddress(192, 168, 0, 1),       // gateway
   IPAddress(255, 255, 255, 0),     // subnet
-  IPAddress(192, 168, 0, 100),     // sendToIP (OSC target)
+  IPAddress(192, 168, 0, 10),     // sendToIP (OSC target)
   8000,                            // receivePort (OSC listening)
   9000,                            // sendPort (OSC destination)
   true                             // useDHCP (fallback to static if false)

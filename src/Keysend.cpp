@@ -2,6 +2,8 @@
 #include "Keysend.h"
 #include <Keyboard.h>
 
+// Does not include modifier keys as this can be problematic for holding exec keys
+
 // Structure to hold key mapping
 struct KeyMapping {
     int executorIndex;
@@ -49,7 +51,8 @@ const KeyMapping keyMap[] = {
     {310, 'p', "P"},
     
     // Row 4 (401-410)
-    {401, KEY_ESC, "Escape"},
+//    {401, KEY_ESC, "Escape"},
+    {401, '\'', "Apostrophe"},  // Instead of KEY_ESC
     {402, ' ', "Space"},
     {403, KEY_TAB, "Tab"},
     {404, '`', "GraveAccent"},

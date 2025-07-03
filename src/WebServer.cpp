@@ -68,11 +68,11 @@ void sendErrorResponse(const char* errorMsg) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".error-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #d32f2f; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #f44336; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='error-container'>");
@@ -310,12 +310,12 @@ void send404Response() {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".error-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; text-align: center; }");
-  client.println("h1 { color: #d32f2f; margin-top: 0; font-size: 72px; margin-bottom: 10px; }");
-  client.println("h2 { color: #333; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; text-align: center; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #f44336; margin-top: 0; font-size: 72px; margin-bottom: 10px; }");
+  client.println("h2 { color: #e8e6e3; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='error-container'>");
@@ -394,7 +394,6 @@ void handleNetworkSettings(String request) {
   debugPrintf("DHCP setting: %s\n", netConfig.useDHCP ? "ENABLED" : "DISABLED");
   
   
-  // Send success response with improved styling
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -402,11 +401,11 @@ void handleNetworkSettings(String request) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".success-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #2e7d32; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #66bb6a; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='success-container'>");
@@ -469,7 +468,7 @@ void handleOSCSettingsPage() {
   
   waitForWriteSpace();
   
-  // NEW EXEC KEYS CARD
+  // EXEC KEYS CARD
   client.println("<div class='card'>");
   client.println("<h2>Exec Keys</h2>");
   
@@ -483,7 +482,7 @@ void handleOSCSettingsPage() {
   if (Fconfig.sendKeystrokes) client.print(" checked");
   client.println("> Send USB Keystrokes instead of OSC for Exec keys");
   client.println("</label>");
-  client.println("<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts</p>");
+  client.println("<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts XML file</p>");
   
   client.println("<button type='submit'>Save Exec Key Settings</button>");
   client.println("</form>");
@@ -743,7 +742,6 @@ void handleOSCSettings(String request) {
   Fconfig.sendKeystrokes = newSendKeystrokes;
   debugPrintf("Updated sendKeystrokes: %s\n", Fconfig.sendKeystrokes ? "true" : "false");
   
-  // Send success response with improved styling
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -751,17 +749,17 @@ void handleOSCSettings(String request) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".success-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #2e7d32; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #66bb6a; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='success-container'>");
   client.println("<h1>OSC Settings Saved</h1>");
   client.println("<p>OSC settings have been saved successfully. For changes to take full effect, you may have to restart the device.</p>");
-  client.println("<p><a href='/osc_settings'>Return to OSC settings</a></p>");
+  client.println("<p><a href='/'>Return to settings</a></p>");
   client.println("</div></body></html>");
 
   // Save both network config (for OSC settings) and fader config (for sendKeystrokes)
@@ -808,7 +806,7 @@ void sendRedirect() {
 }
 
 // Helper function to send CSS styles
-void sendCommonStyles() {
+void sendCommonStylesLight() {
   client.println("<style>");
   client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f0f0; }");
   client.println(".header { background: #1976d2; color: white; padding: 20px; text-align: center; }");
@@ -828,6 +826,29 @@ void sendCommonStyles() {
   client.println(".divider { border-top: 1px solid #ddd; margin: 20px 0; }");
   client.println("</style>");
 }
+
+// Helper function to send CSS styles
+void sendCommonStyles() {
+  client.println("<style>");
+  client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #202325; color: #e8e6e3; }");
+  client.println(".header { background: #145ea8; color: #e8e6e3; padding: 20px; text-align: center; }");
+  client.println(".header h1 { margin: 0; font-size: 24px; }");
+  client.println(".header p { margin: 5px 0; font-size: 14px; }");
+  client.println(".nav { background: #262a2b; padding: 10px; text-align: center; }");
+  client.println(".nav a { color: #e8e6e3; text-decoration: none; padding: 5px 15px; margin: 0 5px; }");
+  client.println(".nav a:hover { background: #404548; }");
+  client.println(".container { max-width: 600px; margin: 20px auto; padding: 0 20px; }");
+  client.println(".card { background: #181a1b; padding: 20px; margin-bottom: 20px; border: 1px solid #3a3e41; color: #e8e6e3; }");
+  client.println(".card h2 { margin: top: 0; font-size: 20px; border-bottom: 1px solid #3a3e41; padding-bottom: 10px; }");
+  client.println("input[type='text'], input[type='number'], select { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; background: #262a2b; color: #e8e6e3; border: 1px solid #3a3e41; }");
+  client.println("label { display: block; margin-top: 10px; font-weight: bold; color: #e8e6e3; }");
+  client.println(".help { font-size: 12px; color: #a8a095; margin-top: 2px; }");
+  client.println("button { background: #145ea8; color: #e8e6e3; padding: 10px 20px; border: none; cursor: pointer; width: 100%; margin-top: 10px; }");
+  client.println("button:hover { background: #11519a; }");
+  client.println(".divider { border-top: 1px solid #3a3e41; margin: 20px 0; }");
+  client.println("</style>");
+}
+
 
 // Helper function to send navigation header
 void sendNavigationHeader(const char* pageTitle) {
@@ -859,7 +880,7 @@ void handleStatsPage() {
   client.println("<style>");
   client.println("table { width: 100%; border-collapse: collapse; }");
   client.println("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
-  client.println("th { background: #f0f0f0; }");
+  client.println("th { background: #145ea8; }");
   client.println("</style>");
   client.println("</head><body>");
   

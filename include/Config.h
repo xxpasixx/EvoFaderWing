@@ -23,7 +23,7 @@
 
 // Fader position tolerances
 #define TARGET_TOLERANCE 1      // OSC VALUE How close the fader must be to setpoint to consider "done"
-#define SEND_TOLERANCE   2       // Also osc value now
+#define SEND_TOLERANCE   2       // Amout of change in OSC (0-100) before senind an osc update
 
 // Calibration settings
 #define PLATEAU_THRESH   2       // Threshold (analog delta) to consider that the fader has stopped moving
