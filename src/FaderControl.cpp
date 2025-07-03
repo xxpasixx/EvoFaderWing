@@ -4,11 +4,17 @@
 #include "TouchSensor.h"
 #include "WebServer.h"
 #include "Utils.h"
+#include "NeoPixelControl.h"
 
+
+const unsigned long RETRY_INTERVAL = 1000;  // 5 seconds before retry
+bool FaderRetryPending = false;
+unsigned long FaderRetryTime = 0;
 
 //================================
 // MOTOR CONTROL
 //================================
+
 
 void driveMotorWithPWM(Fader& f, int direction, int pwmValue) {
   if (direction == 0) {
@@ -122,17 +128,41 @@ void moveAllFadersToSetpoints() {
     // Small delay to prevent overwhelming the system
     delay(5);
     
-    // Optional: Add timeout protection to prevent infinite loops
-    if (millis() - moveStartTime > FADER_MOVE_TIMEOUT) { // 2 second timeout
-      // Stop all motors if we've been trying for too long
+    // Add timeout protection to prevent infinite loops
+
+    if (millis() - moveStartTime > FADER_MOVE_TIMEOUT) {
+      // Stop all motors and flash red on faders that didn't reach target
       for (int i = 0; i < NUM_FADERS; i++) {
         driveMotorWithPWM(faders[i], 0, 0);
+        
+        // Check if this fader failed to reach target
+        int currentOscValue = readFadertoOSC(faders[i]);
+        int difference = faders[i].setpoint - currentOscValue;
+        
+        if (abs(difference) > Fconfig.targetTolerance && !faders[i].touched) {
+          // Flash red 3 times for failed faders
+          uint8_t origR = faders[i].red, origG = faders[i].green, origB = faders[i].blue;
+          for (int flash = 0; flash < 3; flash++) {
+            faders[i].red = 255; faders[i].green = 0; faders[i].blue = 0;
+            updateNeoPixels();
+            delay(100);
+            faders[i].red = origR; faders[i].green = origG; faders[i].blue = origB;
+            updateNeoPixels();
+            delay(100);
+          }
+        }
       }
+      
+      // Set retry flag
+      FaderRetryPending = true;
+      FaderRetryTime = millis() + RETRY_INTERVAL;
+      
       if (debugMode) {
-        debugPrintf("Fader movement timeout - stopping all motors\n");
+        debugPrintf("Fader movement timeout - will retry in %lu seconds\n", RETRY_INTERVAL/1000);
       }
       break;
     }
+
   }
   
   if (debugMode && allFadersAtTarget) {
@@ -252,3 +282,12 @@ int getFaderIndexFromID(int id) {
 }
 
 
+void checkFaderRetry() {
+  if (FaderRetryPending && millis() >= FaderRetryTime) {
+    FaderRetryPending = false;
+    if (debugMode) {
+      debugPrint("Retrying fader movement...");
+    }
+    moveAllFadersToSetpoints();
+  }
+}

@@ -76,6 +76,8 @@ void setup() {
   // Start NeoPixels
   setupNeoPixels();
 
+  startupFadeSequence(50,1000);
+
   
   //Network reset check
   resetCheckStartTime = millis();
@@ -94,6 +96,9 @@ void loop() {
   handleIncomingOsc();
 
   // Check for manual fader movement
+  
+  checkFaderRetry();  // Check for hung fader
+
   handleFaders();
 
   // Handle I2C Polling for encoders keypresses and encoder key press

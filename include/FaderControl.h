@@ -23,4 +23,7 @@ void moveAllFadersToSetpoints();
 int readFadertoOSC(Fader& f);
 int getFaderIndexFromID(int id);
 
+// Fader retry
+void checkFaderRetry();
+
 #endif // FADER_CONTROL_H

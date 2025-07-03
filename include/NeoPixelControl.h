@@ -20,6 +20,7 @@ extern Adafruit_NeoPixel pixels;
 void setupNeoPixels();
 void updateNeoPixels();
 void updateBaseBrightnessPixels();
+void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME);
 
 uint32_t getScaledColor(const Fader& fader);
 

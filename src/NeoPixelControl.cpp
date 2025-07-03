@@ -29,7 +29,7 @@ void setupNeoPixels() {
     faders[i].red = 255;     // white
     faders[i].green = 255;
     faders[i].blue = 255;
-    faders[i].colorUpdated = true;  // Force initial update
+    //faders[i].colorUpdated = true;  // Force initial update
   }
 }
 
@@ -174,4 +174,131 @@ uint32_t getScaledColor(const Fader& fader) {
     (uint8_t)((g1 + m) * 255),
     (uint8_t)((b1 + m) * 255)
   );
+}
+
+
+
+// Epic color wave startup sequence - challenge accepted!
+void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME) {
+  //const unsigned long STAGGER_DELAY = 50;   // 200ms between faders
+  //const unsigned long COLOR_CYCLE_TIME = 1000; // How long each fader cycles through colors
+  
+  unsigned long startTime = millis();
+  bool animationComplete = false;
+  
+  // Start all faders at black (0,0,0) with zero brightness
+  for (int i = 0; i < NUM_FADERS; i++) {
+    faders[i].currentBrightness = 0;
+    faders[i].red = 0;
+    faders[i].green = 0;
+    faders[i].blue = 0;
+  }
+  
+  while (!animationComplete) {
+    unsigned long now = millis();
+    animationComplete = true;
+    
+    for (int i = 0; i < NUM_FADERS; i++) {
+      unsigned long faderStartTime = startTime + (i * STAGGER_DELAY);
+      
+      if (now >= faderStartTime) {
+        unsigned long elapsed = now - faderStartTime;
+        
+        if (elapsed < COLOR_CYCLE_TIME) {
+          // Color wave is active on this fader
+          animationComplete = false;
+          
+          // Calculate color transition through rainbow spectrum
+          float colorProgress = (elapsed % COLOR_CYCLE_TIME) / (float)COLOR_CYCLE_TIME;
+          float hue = colorProgress * 360.0; // Full rainbow cycle
+          
+          // Convert HSV to RGB (Hue, Saturation=1, Value=1)
+          float c = 1.0; // Saturation at max
+          float x = c * (1.0 - fabs(fmod(hue / 60.0, 2.0) - 1.0));
+          float m = 0.0;
+          
+          float r1, g1, b1;
+          if (hue < 60)      { r1 = c; g1 = x; b1 = 0; }
+          else if (hue < 120){ r1 = x; g1 = c; b1 = 0; }
+          else if (hue < 180){ r1 = 0; g1 = c; b1 = x; }
+          else if (hue < 240){ r1 = 0; g1 = x; b1 = c; }
+          else if (hue < 300){ r1 = x; g1 = 0; b1 = c; }
+          else             { r1 = c; g1 = 0; b1 = x; }
+          
+          // Set the color
+          faders[i].red = (uint8_t)((r1 + m) * 255);
+          faders[i].green = (uint8_t)((g1 + m) * 255);
+          faders[i].blue = (uint8_t)((b1 + m) * 255);
+          
+          // Calculate brightness with breathing effect
+          float breatheProgress = (elapsed % COLOR_CYCLE_TIME) / (float)COLOR_CYCLE_TIME;
+          float breatheValue = (sin(breatheProgress * PI * 2) + 1.0) / 2.0; // Sine wave 0-1
+          
+          // Combine with fade-in effect
+          float fadeProgress = min(1.0f, elapsed / (float)(COLOR_CYCLE_TIME * 0.3)); // Fade in over first 30%
+          
+          int targetBrightness = Fconfig.touchedBrightness;
+          faders[i].currentBrightness = (uint8_t)(targetBrightness * breatheValue * fadeProgress);
+          
+        } else {
+          // Wave has passed, fade out with color shift to final color
+          unsigned long fadeOutTime = elapsed - COLOR_CYCLE_TIME;
+          const unsigned long FADE_OUT_DURATION = 1000; // 1 second fade out
+          
+          if (fadeOutTime < FADE_OUT_DURATION) {
+            animationComplete = false;
+            
+            // Fade to white while dimming
+            float fadeProgress = fadeOutTime / (float)FADE_OUT_DURATION;
+            
+            // Blend current color to white
+            uint8_t currentR = faders[i].red;
+            uint8_t currentG = faders[i].green;
+            uint8_t currentB = faders[i].blue;
+            
+            faders[i].red = (uint8_t)(currentR + (255 - currentR) * fadeProgress);
+            faders[i].green = (uint8_t)(currentG + (255 - currentG) * fadeProgress);
+            faders[i].blue = (uint8_t)(currentB + (255 - currentB) * fadeProgress);
+            
+            // Fade brightness to base
+            float brightnessFade = 1.0 - fadeProgress;
+            faders[i].currentBrightness = (uint8_t)(Fconfig.touchedBrightness * brightnessFade + 
+                                                   Fconfig.baseBrightness * fadeProgress);
+          } else {
+            // Completely finished
+            faders[i].red = 255;
+            faders[i].green = 255;
+            faders[i].blue = 255;
+            faders[i].currentBrightness = Fconfig.baseBrightness;
+          }
+        }
+      } else {
+        // Haven't started yet
+        animationComplete = false;
+        faders[i].currentBrightness = 0;
+        faders[i].red = 0;
+        faders[i].green = 0;
+        faders[i].blue = 0;
+      }
+    }
+    
+    // Update the pixels with the calculated colors and brightness
+    for (int i = 0; i < NUM_FADERS; i++) {
+      uint32_t color = getScaledColor(faders[i]);
+      for (int j = 0; j < PIXELS_PER_FADER; j++) {
+        pixels.setPixelColor(i * PIXELS_PER_FADER + j, color);
+      }
+    }
+    pixels.show();
+    
+    delay(10);
+  }
+  
+  // Final cleanup - ensure all faders are properly reset
+  for (int i = 0; i < NUM_FADERS; i++) {
+    faders[i].currentBrightness = Fconfig.baseBrightness;
+    faders[i].red = 255;
+    faders[i].green = 255;
+    faders[i].blue = 255;
+  }
 }
