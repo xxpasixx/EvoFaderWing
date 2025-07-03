@@ -41,7 +41,9 @@ FaderConfig Fconfig = {
   .baseBrightness = 5,
   .touchedBrightness = 40,
   .fadeTime = 1000,
-  .serialDebug = debugMode
+  .serialDebug = debugMode,
+  .sendKeystrokes = false
+
 };
 
 //================================

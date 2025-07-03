@@ -97,6 +97,7 @@ struct FaderConfig {
   uint8_t touchedBrightness;      // Brightness when fader is touched
   unsigned long fadeTime;         // Fade duration in milliseconds
   bool serialDebug;
+  bool sendKeystrokes;       // Send keystroke using usb rather than osc for exec keys, this gives more native support (can store using exec key directly)
 };
 
 // Touch sensor configuration

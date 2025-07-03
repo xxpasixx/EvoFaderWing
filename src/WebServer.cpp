@@ -168,7 +168,7 @@ void handleWebServer() {
                                 request.indexOf("dhcp=") >= 0 || 
                                 request.indexOf("gw=") >= 0 || request.indexOf("sn=") >= 0);
         bool hasOSCFields = (request.indexOf("osc_sendip=") >= 0 || request.indexOf("osc_sendport=") >= 0 || 
-                            request.indexOf("osc_receiveport=") >= 0);
+                            request.indexOf("osc_receiveport=") >= 0 || request.indexOf("osc_settings=1") >= 0);
         
         // Debug output to see what's being detected
         debugPrintf("hasNetworkFields: %s\n", hasNetworkFields ? "true" : "false");
@@ -461,9 +461,37 @@ void handleOSCSettingsPage() {
   client.println("<button type='submit'>Save OSC Settings</button>");
   client.println("</form>");
   
-  client.println("<div class='divider'></div>");
+  client.println("</div>");
   
-  client.println("<p><strong>Current Status:</strong></p>");
+  waitForWriteSpace();
+  
+  // NEW EXEC KEYS CARD
+  client.println("<div class='card'>");
+  client.println("<h2>Exec Keys</h2>");
+  
+  client.println("<form method='get' action='/save'>");
+  
+  // Hidden field to identify this as an OSC settings request
+  client.println("<input type='hidden' name='osc_settings' value='1'>");
+  
+  client.println("<label>");
+  client.print("<input type='checkbox' name='sendKeystrokes' value='on'");
+  if (Fconfig.sendKeystrokes) client.print(" checked");
+  client.println("> Send USB Keystrokes instead of OSC for Exec keys");
+  client.println("</label>");
+  client.println("<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts</p>");
+  
+  client.println("<button type='submit'>Save Exec Key Settings</button>");
+  client.println("</form>");
+  
+  client.println("</div>");
+  
+  waitForWriteSpace();
+  
+  // CURRENT STATUS SECTION
+  client.println("<div class='card'>");
+  client.println("<h2>Current Status</h2>");
+  
   client.print("<p>Send to: ");
   client.print(ipToString(netConfig.sendToIP));
   client.print(":");
@@ -474,6 +502,10 @@ void handleOSCSettingsPage() {
   client.print(ipToString(Ethernet.localIP()));
   client.print(":");
   client.print(netConfig.receivePort);
+  client.println("</p>");
+  
+  client.print("<p>Exec Key Mode: ");
+  client.print(Fconfig.sendKeystrokes ? "USB Keystrokes" : "OSC");
   client.println("</p>");
   
   client.println("</div>");
@@ -660,6 +692,9 @@ void handleOSCSettings(String request) {
   String sendPortStr = getParam(request, "osc_sendport");
   String receivePortStr = getParam(request, "osc_receiveport");
   
+  // NEW: Extract sendKeystrokes checkbox
+  bool newSendKeystrokes = (request.indexOf("sendKeystrokes=on") >= 0 || request.indexOf("sendKeystrokes=1") >= 0);
+  
   // Validate and update OSC Send IP
   if (sendIPStr.length() > 0) {
     IPAddress newSendIP = stringToIP(sendIPStr);
@@ -700,10 +735,11 @@ void handleOSCSettings(String request) {
     }
   }
   
-  // Save to EEPROM
-
+  // NEW: Update sendKeystrokes setting
+  Fconfig.sendKeystrokes = newSendKeystrokes;
+  debugPrintf("Updated sendKeystrokes: %s\n", Fconfig.sendKeystrokes ? "true" : "false");
   
- // Send success response with improved styling
+  // Send success response with improved styling
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -724,12 +760,13 @@ void handleOSCSettings(String request) {
   client.println("<p><a href='/osc_settings'>Return to OSC settings</a></p>");
   client.println("</div></body></html>");
 
-    saveNetworkConfig();
+  // Save both network config (for OSC settings) and fader config (for sendKeystrokes)
+  saveNetworkConfig();
+  saveFaderConfig();  // NEW: Save fader config for sendKeystrokes setting
     
-    restartUDP();
+  restartUDP();
 
   debugPrint("OSC settings saved successfully");
-
 }
 
 

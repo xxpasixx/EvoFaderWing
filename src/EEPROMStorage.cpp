@@ -313,6 +313,7 @@ void dumpEepromConfig() {
     debugPrintf("Touched Brightness: %d\n", storedConfig.touchedBrightness);
     debugPrintf("Fade Time (ms): %d\n", storedConfig.fadeTime);
     debugPrintf("Serial Debug: %s\n", storedConfig.serialDebug ? "Enabled" : "Disabled");
+    debugPrintf("Send Keystrokes: %s\n", storedConfig.sendKeystrokes ? "Enabled" : "Disabled");
     
   } else {
     debugPrintf("Fader config not found (signature=0x%02X, expected=0x%02X)\n", 

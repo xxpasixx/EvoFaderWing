@@ -207,7 +207,7 @@ void processKeypressData(uint8_t count, uint8_t address) {
       continue;
     }
     
-    debugPrintf("  Key %d: %s", keyNumber, state ? "PRESSED" : "RELEASED");
+    //debugPrintf("  Key %d: %s", keyNumber, state ? "PRESSED" : "RELEASED");
     
         // Check for reset condition: key 401 pressed during startup window
     if (checkForReset && keyNumber == 401 && state == 1) {
@@ -274,26 +274,32 @@ void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
     return;
   }
   
-  // Send keypress will add option for osc or keypress later for now we are testing with both
-  if (state) {
-    sendKeyPress(keyNumber);
+  // Send keypress if option is checked
+  if (Fconfig.sendKeystrokes){
+
+    // Send press if 1 and release if 0
+    state ? sendKeyPress(keyNumber) : sendKeyRelease(keyNumber);
+
+    debugPrintf("[Key] Sent: %d %s", keyNumber, state ? "PRESSED" : "RELEASED");
+
   } else {
-    sendKeyRelease(keyNumber);
+
+    // Create the OSC address
+    char oscAddress[32];
+    snprintf(oscAddress, sizeof(oscAddress), "/Key%d", keyNumber);
+    
+    // Convert state to int for OSC message
+    int keyState = (int)state;
+    
+    // Send the OSC message
+    sendOscMessage(oscAddress, ",i", &keyState);
+    
+    // Debug output
+    debugPrintf("[OSC] Sent: %s %d (key %d %s)", 
+              oscAddress, keyState, keyNumber, state ? "PRESSED" : "RELEASED");
+
   }
 
-  // Create the OSC address
-  char oscAddress[32];
-  snprintf(oscAddress, sizeof(oscAddress), "/Key%d", keyNumber);
-  
-  // Convert state to int for OSC message
-  int keyState = (int)state;
-  
-  // Send the OSC message
-  sendOscMessage(oscAddress, ",i", &keyState);
-  
-  // Debug output
-  debugPrintf("[OSC] Sent: %s %d (key %d %s)", 
-             oscAddress, keyState, keyNumber, state ? "PRESSED" : "RELEASED");
 }
 
 
