@@ -51,6 +51,9 @@ void setup() {
     debugPrint("Touch sensor initialization failed!");
   }
 
+    // Start NeoPixels
+  setupNeoPixels();
+
     // Check calibration will load calibration data if present ortherwise it will run calibration
   checkCalibration(); 
 
@@ -72,11 +75,8 @@ void setup() {
 
   // Start web server for configuration
   startWebServer();
-  
-  // Start NeoPixels
-  setupNeoPixels();
 
-  startupFadeSequence(50,1000);
+  fadeSequence(50,1000);
 
   
   //Network reset check
@@ -86,7 +86,8 @@ void setup() {
 }
 
 void loop() {
-  // Network reset check exiry
+  // Network reset check exiry PRESS 401 5 times during this time for network reset
+
   if (checkForReset && (millis() - resetCheckStartTime > 5000)) {
     checkForReset = false;
     debugPrint("[RESET] Reset check window expired.");

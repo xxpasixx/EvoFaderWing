@@ -178,8 +178,7 @@ uint32_t getScaledColor(const Fader& fader) {
 
 
 
-// Epic color wave startup sequence - challenge accepted!
-void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME) {
+void fadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME) {
   
   unsigned long startTime = millis();
   bool animationComplete = false;

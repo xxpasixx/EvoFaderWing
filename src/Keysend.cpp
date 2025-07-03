@@ -162,22 +162,6 @@ void sendKeyTap(const String& keyID, unsigned long duration = 50) {
     sendKeyRelease(keyID);
 }
 
-// Update all key states - call this in loop to handle held keys
-// void updateKeyStates() {
-//     unsigned long currentTime = millis();
-    
-//     // This function can be used to implement auto-repeat or timeout logic
-//     // For now, it just maintains the state tracking
-//     for (int i = 0; i < activeKeyCount; i++) {
-//         if (keyStates[i].isPressed) {
-//             // Key is being held - you could add auto-repeat logic here if needed
-//             // For example:
-//             // if (currentTime - keyStates[i].lastUpdate > AUTO_REPEAT_DELAY) {
-//             //     // Trigger repeat action
-//             // }
-//         }
-//     }
-// }
 
 // Release all keys (useful for cleanup or panic button)
 void releaseAllKeys() {
@@ -192,46 +176,3 @@ void releaseAllKeys() {
     }
     Keyboard.releaseAll(); // Extra safety
 }
-
-// // Get debug info about a key
-// String getKeyInfo(const String& keyID) {
-//     int executorIndex = keyID.toInt();
-    
-//     for (int i = 0; i < KEY_MAP_SIZE; i++) {
-//         if (keyMap[i].executorIndex == executorIndex) {
-//             return String("Exec ") + String(executorIndex) + 
-//                    " -> " + String(keyMap[i].keyName) + 
-//                    " (code: " + String(keyMap[i].keyCode) + ")";
-//         }
-//     }
-    
-//     return "Key not mapped: " + keyID;
-// }
-
-// Example usage in your main code:
-/*
-void setup() {
-    Serial.begin(115200);
-    initKeyboard();
-}
-
-void loop() {
-    // Example: When button for exec 101 is pressed
-    if (buttonPressed(101)) {
-        sendKeyPress("101");  // Sends 'Z' press
-    }
-    
-    // When button for exec 101 is released
-    if (buttonReleased(101)) {
-        sendKeyRelease("101");  // Sends 'Z' release
-    }
-    
-    // For a quick tap
-    if (buttonTapped(201)) {
-        sendKeyTap("201");  // Sends 'A' press and release
-    }
-    
-    // Update key states (for potential auto-repeat, etc.)
-    updateKeyStates();
-}
-*/

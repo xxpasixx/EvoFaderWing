@@ -219,6 +219,8 @@ void handleWebServer() {
         requestType = 'G'; // Fader settings page
       } else if (path == "/osc_settings") {
         requestType = 'A'; // OSC settings page
+      } else if (path.startsWith("/downloadshortcuts")) {
+        requestType = 'W'; // XML download
       } else if (path == "/") {
         requestType = 'H'; // Home/Root page
       }
@@ -280,6 +282,10 @@ void handleWebServer() {
           
         case 'A': // OSC settings page
           handleOSCSettingsPage();
+          break;
+
+        case 'W': // XML download
+          handleGMA3ShortcutsDownload();
           break;
           
         default: // 404 or unrecognized request
@@ -486,7 +492,18 @@ void handleOSCSettingsPage() {
   
   client.println("<button type='submit'>Save Exec Key Settings</button>");
   client.println("</form>");
+  client.println("</div>");
+
+  client.println("<div class='card'>");
+  client.println("<h2>Downloads</h2>");
   
+  client.println("<p><strong>GMA3 Keyboard Shortcuts XML</strong></p>");
+  client.println("<p class='help'>Import this XML file into GMA3 to set up keyboard shortcuts. Use this when 'Send USB Keystrokes' is enabled above.</p>");
+  client.println("<form method='get' action='/downloadshortcuts'>");
+  client.println("<button type='submit'>Download GMA3 Shortcuts XML</button>");
+  client.println("</form>");
+
+
   client.println("</div>");
   
   waitForWriteSpace();
@@ -667,6 +684,8 @@ void handleTouchSettings(String request) {
   // Apply the settings to the touch sensor
   setAutoTouchCalibration(autoCalibrationMode);
   manualTouchCalibration();
+  
+  fadeSequence(25,500);
   
   // Save to EEPROM
   saveTouchConfig();
@@ -1197,4 +1216,76 @@ void waitForWriteSpace() {
   while (client.connected() && client.availableForWrite() < 100) {
     delay(1);
   }
+}
+
+
+
+void handleGMA3ShortcutsDownload() {
+  debugPrint("Serving GMA3 shortcuts XML file download...");
+  
+  // Your GMA3 shortcuts XML content
+  const char* xmlContent = R"(<?xml version="1.0" encoding="UTF-8"?>
+<GMA3 DataVersion="1.9.3.3">
+    <KeyboardShortCuts KeyboardShortcutsActive="Yes">
+        <!-- Row 1 (101-110) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="101" Shortcut="Z" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="102" Shortcut="X" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="103" Shortcut="C" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="104" Shortcut="V" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="105" Shortcut="B" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="106" Shortcut="N" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="107" Shortcut="M" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="108" Shortcut="Comma" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="109" Shortcut="Period" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="110" Shortcut="Slash" />
+        
+        <!-- Row 2 (201-210) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="201" Shortcut="A" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="202" Shortcut="S" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="203" Shortcut="D" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="204" Shortcut="F" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="205" Shortcut="G" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="206" Shortcut="H" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="207" Shortcut="J" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="208" Shortcut="K" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="209" Shortcut="L" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="210" Shortcut="Semicolon" />
+        
+        <!-- Row 3 (301-310) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="301" Shortcut="Q" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="302" Shortcut="W" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="303" Shortcut="E" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="304" Shortcut="R" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="305" Shortcut="T" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="306" Shortcut="Y" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="307" Shortcut="U" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="308" Shortcut="I" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="309" Shortcut="O" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="310" Shortcut="P" />
+        
+        <!-- Row 4 (401-410) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="401" Shortcut="Apostrophe" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="402" Shortcut="Space" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="403" Shortcut="Tab" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="404" Shortcut="GraveAccent" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="405" Shortcut="Left" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="406" Shortcut="Right" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="407" Shortcut="Up" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="408" Shortcut="Down" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="409" Shortcut="Backslash" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="410" Shortcut="CapsLock" />
+    </KeyboardShortCuts>
+</GMA3>)";
+
+  // Send headers for file download
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/xml");
+  client.println("Content-Disposition: attachment; filename=\"EvoFaderWing_keyboard_shortcuts.xml\"");
+  client.print("Content-Length: ");
+  client.println(strlen(xmlContent));
+  client.println("Connection: close");
+  client.println();
+  
+  // Send the XML content
+  client.print(xmlContent);
 }

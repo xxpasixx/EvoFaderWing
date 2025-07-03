@@ -180,7 +180,7 @@ void saveTouchConfig() {
   EEPROM.put(EEPROM_TOUCH_DATA_ADDR, touchConfig);
   
   debugPrint("Touch sensor configuration saved to EEPROM.");
-  startupFadeSequence(25,500);
+
 }
 
 void loadTouchConfig() {
