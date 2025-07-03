@@ -38,6 +38,7 @@ const int numSlaves = sizeof(slaveAddresses) / sizeof(slaveAddresses[0]);
 // === Timing Variables ===
 unsigned long lastPollTimeSimple = 0;          
 const unsigned long I2C_POLL_INTERVAL_SIMPLE = 10;    // Poll every 10ms instead of 1ms
+int resetPressCount = 0;
 
 // === SETUP FUNCTION ===
 
@@ -211,12 +212,13 @@ void processKeypressData(uint8_t count, uint8_t address) {
     
         // Check for reset condition: key 401 pressed during startup window
     if (checkForReset && keyNumber == 401 && state == 1) {
-      debugPrint("[NETWORK RESET]");
-      displayShowResetHeader();
-      delay(3000);
-      resetNetworkDefaults();
-      checkForReset = false;  // Prevent multiple resets
-      return;  // Skip further processing of this event
+      ++resetPressCount;
+        if (resetPressCount >= 5) {
+          debugPrint("[NETWORK RESET]");
+          resetNetworkDefaults();
+          checkForReset = false;  // Prevent multiple resets
+          return;  // Skip further processing of this event
+        }
     }
 
       sendKeyOSC(keyNumber, state);

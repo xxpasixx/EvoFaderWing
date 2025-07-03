@@ -180,14 +180,19 @@ uint32_t getScaledColor(const Fader& fader) {
 
 // Epic color wave startup sequence - challenge accepted!
 void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME) {
-  //const unsigned long STAGGER_DELAY = 50;   // 200ms between faders
-  //const unsigned long COLOR_CYCLE_TIME = 1000; // How long each fader cycles through colors
   
   unsigned long startTime = millis();
   bool animationComplete = false;
+  uint8_t originalColors[NUM_FADERS][3];
   
   // Start all faders at black (0,0,0) with zero brightness
   for (int i = 0; i < NUM_FADERS; i++) {
+    
+    originalColors[i][0] = faders[i].red;
+    originalColors[i][1] = faders[i].green;
+    originalColors[i][2] = faders[i].blue;
+    
+
     faders[i].currentBrightness = 0;
     faders[i].red = 0;
     faders[i].green = 0;
@@ -241,34 +246,34 @@ void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_
           faders[i].currentBrightness = (uint8_t)(targetBrightness * breatheValue * fadeProgress);
           
         } else {
-          // Wave has passed, fade out with color shift to final color
+          // Wave has passed, fade out with color shift to original color
           unsigned long fadeOutTime = elapsed - COLOR_CYCLE_TIME;
-          const unsigned long FADE_OUT_DURATION = 1000; // 1 second fade out
+          const unsigned long FADE_OUT_DURATION = 250; // 250ms fade out
           
           if (fadeOutTime < FADE_OUT_DURATION) {
             animationComplete = false;
             
-            // Fade to white while dimming
+            // Fade to original color while dimming
             float fadeProgress = fadeOutTime / (float)FADE_OUT_DURATION;
             
-            // Blend current color to white
+            // Blend current color to original color
             uint8_t currentR = faders[i].red;
             uint8_t currentG = faders[i].green;
             uint8_t currentB = faders[i].blue;
             
-            faders[i].red = (uint8_t)(currentR + (255 - currentR) * fadeProgress);
-            faders[i].green = (uint8_t)(currentG + (255 - currentG) * fadeProgress);
-            faders[i].blue = (uint8_t)(currentB + (255 - currentB) * fadeProgress);
+            faders[i].red = (uint8_t)(currentR + (originalColors[i][0] - currentR) * fadeProgress);
+            faders[i].green = (uint8_t)(currentG + (originalColors[i][1] - currentG) * fadeProgress);
+            faders[i].blue = (uint8_t)(currentB + (originalColors[i][2] - currentB) * fadeProgress);
             
             // Fade brightness to base
             float brightnessFade = 1.0 - fadeProgress;
             faders[i].currentBrightness = (uint8_t)(Fconfig.touchedBrightness * brightnessFade + 
                                                    Fconfig.baseBrightness * fadeProgress);
           } else {
-            // Completely finished
-            faders[i].red = 255;
-            faders[i].green = 255;
-            faders[i].blue = 255;
+            // Completely finished - use original colors
+            faders[i].red = originalColors[i][0];
+            faders[i].green = originalColors[i][1];
+            faders[i].blue = originalColors[i][2];
             faders[i].currentBrightness = Fconfig.baseBrightness;
           }
         }
@@ -297,8 +302,39 @@ void startupFadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_
   // Final cleanup - ensure all faders are properly reset
   for (int i = 0; i < NUM_FADERS; i++) {
     faders[i].currentBrightness = Fconfig.baseBrightness;
-    faders[i].red = 255;
-    faders[i].green = 255;
-    faders[i].blue = 255;
+    faders[i].red = originalColors[i][0];
+    faders[i].green = originalColors[i][1];
+    faders[i].blue = originalColors[i][2];
+  }
+}
+
+void flashAllFadersRed() {
+  // Store original colors
+  uint8_t originalColors[NUM_FADERS][3];
+  for (int i = 0; i < NUM_FADERS; i++) {
+    originalColors[i][0] = faders[i].red;
+    originalColors[i][1] = faders[i].green;
+    originalColors[i][2] = faders[i].blue;
+  }
+  
+  // Flash 5 times
+  for (int flash = 0; flash < 5; flash++) {
+    // Set all to red
+    for (int i = 0; i < NUM_FADERS; i++) {
+      faders[i].red = 255;
+      faders[i].green = 0;
+      faders[i].blue = 0;
+    }
+    updateNeoPixels();
+    delay(100);
+    
+    // Restore original colors
+    for (int i = 0; i < NUM_FADERS; i++) {
+      faders[i].red = originalColors[i][0];
+      faders[i].green = originalColors[i][1];
+      faders[i].blue = originalColors[i][2];
+    }
+    updateNeoPixels();
+    delay(100);
   }
 }

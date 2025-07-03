@@ -260,6 +260,7 @@ void OLED::showHeader(const char* title) {
     setTextSize(TEXT_SIZE_SMALL);  // Larger text for header
     setTextColor(SSD1306_WHITE);
     print(title);
+    display();
 }
 
 void OLED::showStatus(const char* status) {

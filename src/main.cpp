@@ -87,7 +87,7 @@ void setup() {
 
 void loop() {
   // Network reset check exiry
-  if (checkForReset && (millis() - resetCheckStartTime > 10000)) {
+  if (checkForReset && (millis() - resetCheckStartTime > 5000)) {
     checkForReset = false;
     debugPrint("[RESET] Reset check window expired.");
   }
@@ -140,5 +140,6 @@ void displayIPAddress(){
 }
 
 void displayShowResetHeader(){
+  display.clear();
   display.showHeader("Network Reset");
 }

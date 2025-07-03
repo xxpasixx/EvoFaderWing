@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include "FaderControl.h"
 #include "NetworkOSC.h"
+#include "NeoPixelControl.h"
 
 //================================
 // CALIBRATION FUNCTIONS
@@ -19,6 +20,7 @@ void saveCalibration() {
     EEPROM.put(addr, faders[i].maxVal); addr += sizeof(int);
   }
   debugPrint("Calibration saved.");
+
 }
 
 void loadCalibration() {
@@ -177,6 +179,7 @@ void saveTouchConfig() {
   EEPROM.put(EEPROM_TOUCH_DATA_ADDR, touchConfig);
   
   debugPrint("Touch sensor configuration saved to EEPROM.");
+  startupFadeSequence(25,500);
 }
 
 void loadTouchConfig() {
@@ -265,6 +268,10 @@ void resetNetworkDefaults() {
   
   // Save to EEPROM
   saveNetworkConfig();
+
+  flashAllFadersRed();
+  displayShowResetHeader();
+  delay(3000);
   
    displayIPAddress();
 
