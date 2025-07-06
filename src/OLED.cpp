@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <IPAddress.h>
+#include "Config.h"
 
 // === Constructor and Destructor ===
 
@@ -18,8 +19,9 @@ OLED::OLED() {
 
 OLED::~OLED() {
     if (oledDisplay) {
-        delete oledDisplay;
-        oledDisplay = nullptr;
+        //delete oledDisplay;
+        //oledDisplay = nullptr;
+        oledDisplay.reset();   // New method
     }
 }
 
@@ -45,13 +47,16 @@ bool OLED::begin() {
     }
     
     // Create Adafruit display object with detected address
-    oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+    //oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+    oledDisplay = std::make_unique<Adafruit_SSD1306>(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);   // New method
     
     // Initialize the display using Adafruit library
     if (!oledDisplay->begin(SSD1306_SWITCHCAPVCC, i2cAddress)) {
         debugPrint("[OLED] ERR: alloc failed");
-        delete oledDisplay;
-        oledDisplay = nullptr;
+        //delete oledDisplay;
+        //oledDisplay = nullptr;
+        oledDisplay.reset();  // New Method
         return false;
     }
     
@@ -74,13 +79,15 @@ bool OLED::begin(uint8_t address) {
         i2cAddress = address;
         
         // Create Adafruit display object
-        oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+        //oledDisplay = new Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+        oledDisplay = std::make_unique<Adafruit_SSD1306>(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);   // New method
         
         // Initialize the display using Adafruit library
         if (!oledDisplay->begin(SSD1306_SWITCHCAPVCC, i2cAddress)) {
             debugPrint("[OLED] ERR: alloc failed");
-            delete oledDisplay;
-            oledDisplay = nullptr;
+            //delete oledDisplay;
+            //oledDisplay = nullptr;
+            oledDisplay.reset();  //New method
             return false;
         }
         
@@ -250,9 +257,10 @@ void OLED::showHeader(const char* title) {
     
     clearLine(0);
     setCursor(0, 0);
-    setTextSize(TEXT_SIZE_MEDIUM);  // Larger text for header
+    setTextSize(TEXT_SIZE_SMALL);  // Larger text for header
     setTextColor(SSD1306_WHITE);
     print(title);
+    display();
 }
 
 void OLED::showStatus(const char* status) {
@@ -327,48 +335,54 @@ void OLED::setupOLED() {
     // Attempt to initialize the display with auto-detection
     if (begin()) {
         // Display initialized successfully
-        debugPrintf("[OLED] Display at 0x%02X", getAddress());
+        // debugPrintf("[OLED] Display at 0x%02X", getAddress());
         
-        // Show simple test screen
-        clear();
+        // // Show simple test screen
+        // clear();
         
-        setCursor(0, 0);
-        setTextSize(TEXT_SIZE_SMALL);
-        print("OLED Test OK");
+        // setCursor(0, 0);
+        // setTextSize(TEXT_SIZE_SMALL);
+        // print("OLED Test OK");
         
-        setCursor(0, 10);
-        print("Adafruit Library");
+        // setCursor(0, 10);
+        // print("Adafruit Library");
         
-        setCursor(0, 20);
-        printf("Address: 0x%02X", getAddress());
+        // setCursor(0, 20);
+        // printf("Address: 0x%02X", getAddress());
         
-        setCursor(0, 30);
-        print("128x64 SSD1306");
+        // setCursor(0, 30);
+        // print("128x64 SSD1306");
         
-        setCursor(0, 50);
-        print("Ready!");
+        // setCursor(0, 50);
+        // print("Ready!");
         
-        display();  // Update physical display
-        debugPrint("[OLED] Test screen");
+        // display();  // Update physical display
+        // debugPrint("[OLED] Test screen");
         
-        // Brief delay to show test message
-        delay(1000);
+        // // Brief delay to show test message
+        // delay(1000);
         
         // Show welcome screen
         clear();
-        showHeader("Fader Wing");
-        
+        showHeader("EvoFaderWing") ;
         setCursor(0, 20);
         setTextSize(TEXT_SIZE_SMALL);
-        print("OLED: Ready");
-        
-        setCursor(0, 30);
-        printf("Addr: 0x%02X", getAddress());
-        
-        showStatus("Starting...");
+        printf("Version: %s", SW_VERSION);
+
         display();
+
+
+        // setCursor(0, 20);
+        // setTextSize(TEXT_SIZE_SMALL);
+        // print("OLED: Ready");
         
-        debugPrint("[OLED] init OK");
+        // setCursor(0, 30);
+        // printf("Addr: 0x%02X", getAddress());
+        
+        // showStatus("Starting...");
+        // display();
+        
+        // debugPrint("[OLED] init OK");
         delay(2000);
         
     } else {
@@ -382,7 +396,8 @@ void OLED::setupOLED() {
 
 Adafruit_SSD1306* OLED::getDisplay() {
     // Get direct access to Adafruit display object for advanced use
-    return oledDisplay;
+    //return oledDisplay;
+    return oledDisplay.get();
 }
 
 // === Private Helper Functions ===
@@ -417,18 +432,25 @@ void OLED::clearDebugLines() {
 void OLED::showIPAddress(IPAddress ip, uint16_t recvPort, IPAddress sendIP, uint16_t sendPort) {
     if (!displayInitialized || !oledDisplay) return;
 
-    // Clear lines to ensure clean display
-    clearLine(0);  // First line
-    clearLine(1);  // Second line
+    clear();
 
-    // First line: Local IP and receive port
+    // First line: Header
     setCursor(0, 0);
     setTextSize(TEXT_SIZE_SMALL);
-    setTextColor(SSD1306_WHITE);
+    print("EvoFaderWing");
+
+    setCursor(0, CHAR_HEIGHT_SMALL * 2);
+    print("Receive:");
+
+    // Receive IP and port
+    setCursor(0, CHAR_HEIGHT_SMALL * 3);
     printf("%d.%d.%d.%d:%d", ip[0], ip[1], ip[2], ip[3], recvPort);
 
-    // Second line: Send-to IP and port
-    setCursor(0, CHAR_HEIGHT_SMALL);
+    setCursor(0, CHAR_HEIGHT_SMALL * 4);
+    print("Send:");
+
+    // Send IP and port
+    setCursor(0, CHAR_HEIGHT_SMALL * 5);
     printf("%d.%d.%d.%d:%d", sendIP[0], sendIP[1], sendIP[2], sendIP[3], sendPort);
 
     display();

@@ -1,4 +1,4 @@
--- EVOFaderWing Lua script for syncing EVOFaderWing using OSC
+-- EVOFaderWing v0.2 Lua script for syncing EVOFaderWing using OSC
 -- Sends ALL data as ONE OSC message: page + fader values (0-100) + color values
 -- OSC sent when data has changed or after autoResendInterval
 --

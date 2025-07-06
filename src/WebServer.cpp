@@ -68,11 +68,11 @@ void sendErrorResponse(const char* errorMsg) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".error-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #d32f2f; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #f44336; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='error-container'>");
@@ -168,7 +168,7 @@ void handleWebServer() {
                                 request.indexOf("dhcp=") >= 0 || 
                                 request.indexOf("gw=") >= 0 || request.indexOf("sn=") >= 0);
         bool hasOSCFields = (request.indexOf("osc_sendip=") >= 0 || request.indexOf("osc_sendport=") >= 0 || 
-                            request.indexOf("osc_receiveport=") >= 0);
+                            request.indexOf("osc_receiveport=") >= 0 || request.indexOf("osc_settings=1") >= 0);
         
         // Debug output to see what's being detected
         debugPrintf("hasNetworkFields: %s\n", hasNetworkFields ? "true" : "false");
@@ -219,6 +219,8 @@ void handleWebServer() {
         requestType = 'G'; // Fader settings page
       } else if (path == "/osc_settings") {
         requestType = 'A'; // OSC settings page
+      } else if (path.startsWith("/downloadshortcuts")) {
+        requestType = 'W'; // XML download
       } else if (path == "/") {
         requestType = 'H'; // Home/Root page
       }
@@ -281,6 +283,10 @@ void handleWebServer() {
         case 'A': // OSC settings page
           handleOSCSettingsPage();
           break;
+
+        case 'W': // XML download
+          handleGMA3ShortcutsDownload();
+          break;
           
         default: // 404 or unrecognized request
           debugPrint("Unrecognized request, sending 404");
@@ -310,12 +316,12 @@ void send404Response() {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".error-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; text-align: center; }");
-  client.println("h1 { color: #d32f2f; margin-top: 0; font-size: 72px; margin-bottom: 10px; }");
-  client.println("h2 { color: #333; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; text-align: center; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #f44336; margin-top: 0; font-size: 72px; margin-bottom: 10px; }");
+  client.println("h2 { color: #e8e6e3; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='error-container'>");
@@ -335,9 +341,13 @@ void handleDebugToggle(String requestBody) {
   Serial.printf("[Toggle] Debug mode is now: %d\n", debugMode);
 
     Fconfig.serialDebug = debugMode;
+  
+    if (!debugMode) display.clearDebugLines();
+    if (!debugMode) displayIPAddress();
+
     saveFaderConfig();
 
-  if (!debugMode) display.clearDebugLines();
+  
 
   sendRedirect();
 }
@@ -390,7 +400,6 @@ void handleNetworkSettings(String request) {
   debugPrintf("DHCP setting: %s\n", netConfig.useDHCP ? "ENABLED" : "DISABLED");
   
   
-  // Send success response with improved styling
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -398,11 +407,11 @@ void handleNetworkSettings(String request) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".success-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #2e7d32; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #66bb6a; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='success-container'>");
@@ -461,9 +470,48 @@ void handleOSCSettingsPage() {
   client.println("<button type='submit'>Save OSC Settings</button>");
   client.println("</form>");
   
-  client.println("<div class='divider'></div>");
+  client.println("</div>");
   
-  client.println("<p><strong>Current Status:</strong></p>");
+  waitForWriteSpace();
+  
+  // EXEC KEYS CARD
+  client.println("<div class='card'>");
+  client.println("<h2>Exec Keys</h2>");
+  
+  client.println("<form method='get' action='/save'>");
+  
+  // Hidden field to identify this as an OSC settings request
+  client.println("<input type='hidden' name='osc_settings' value='1'>");
+  
+  client.println("<label>");
+  client.print("<input type='checkbox' name='sendKeystrokes' value='on'");
+  if (Fconfig.sendKeystrokes) client.print(" checked");
+  client.println("> Send USB Keystrokes instead of OSC for Exec keys");
+  client.println("</label>");
+  client.println("<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts XML file</p>");
+  
+  client.println("<button type='submit'>Save Exec Key Settings</button>");
+  client.println("</form>");
+  client.println("</div>");
+
+  client.println("<div class='card'>");
+  client.println("<h2>Downloads</h2>");
+  
+  client.println("<p><strong>GMA3 Keyboard Shortcuts XML</strong></p>");
+  client.println("<p class='help'>Import this XML file into GMA3 to set up keyboard shortcuts. Use this when 'Send USB Keystrokes' is enabled above.</p>");
+  client.println("<form method='get' action='/downloadshortcuts'>");
+  client.println("<button type='submit'>Download GMA3 Shortcuts XML</button>");
+  client.println("</form>");
+
+
+  client.println("</div>");
+  
+  waitForWriteSpace();
+  
+  // CURRENT STATUS SECTION
+  client.println("<div class='card'>");
+  client.println("<h2>Current Status</h2>");
+  
   client.print("<p>Send to: ");
   client.print(ipToString(netConfig.sendToIP));
   client.print(":");
@@ -474,6 +522,10 @@ void handleOSCSettingsPage() {
   client.print(ipToString(Ethernet.localIP()));
   client.print(":");
   client.print(netConfig.receivePort);
+  client.println("</p>");
+  
+  client.print("<p>Exec Key Mode: ");
+  client.print(Fconfig.sendKeystrokes ? "USB Keystrokes" : "OSC");
   client.println("</p>");
   
   client.println("</div>");
@@ -518,6 +570,7 @@ void handleFaderSettings(String request) {
   String sendToleranceStr = getParam(request, "sendTolerance");
   String baseBrightnessStr = getParam(request, "baseBrightness");
   String touchedBrightnessStr = getParam(request, "touchedBrightness");
+  String fadeTimeStr = getParam(request, "fadeTime");
   
   // Validate and update using constrainParam
   if (minPwmStr.length() > 0) {
@@ -553,6 +606,12 @@ void handleFaderSettings(String request) {
     debugPrintf("Touched Brightness saved: %d\n", Fconfig.touchedBrightness);
   }
   
+  if (fadeTimeStr.length() > 0) {
+    int fadeTime = fadeTimeStr.toInt();
+    Fconfig.fadeTime = constrainParam(fadeTime, 0, 10000, Fconfig.fadeTime);
+    debugPrintf("Fade Time saved: %d\n", Fconfig.fadeTime);
+  }
+
   // Additional logical validation
   if (Fconfig.minPwm > Fconfig.defaultPwm) {
     debugPrint("Warning: Min PWM is greater than Default PWM, swapping values");
@@ -626,6 +685,8 @@ void handleTouchSettings(String request) {
   setAutoTouchCalibration(autoCalibrationMode);
   manualTouchCalibration();
   
+  fadeSequence(25,500);
+  
   // Save to EEPROM
   saveTouchConfig();
   
@@ -652,6 +713,9 @@ void handleOSCSettings(String request) {
   String sendIPStr = getParam(request, "osc_sendip");
   String sendPortStr = getParam(request, "osc_sendport");
   String receivePortStr = getParam(request, "osc_receiveport");
+  
+  // NEW: Extract sendKeystrokes checkbox
+  bool newSendKeystrokes = (request.indexOf("sendKeystrokes=on") >= 0 || request.indexOf("sendKeystrokes=1") >= 0);
   
   // Validate and update OSC Send IP
   if (sendIPStr.length() > 0) {
@@ -693,10 +757,10 @@ void handleOSCSettings(String request) {
     }
   }
   
-  // Save to EEPROM
-
+  // NEW: Update sendKeystrokes setting
+  Fconfig.sendKeystrokes = newSendKeystrokes;
+  debugPrintf("Updated sendKeystrokes: %s\n", Fconfig.sendKeystrokes ? "true" : "false");
   
- // Send success response with improved styling
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -704,25 +768,26 @@ void handleOSCSettings(String request) {
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
   client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".success-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #2e7d32; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
+  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
+  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
+  client.println("h1 { color: #66bb6a; margin-top: 0; }");
+  client.println("p { color: #a8a095; line-height: 1.6; }");
+  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
   client.println("a:hover { text-decoration: underline; }");
   client.println("</style></head><body>");
   client.println("<div class='success-container'>");
   client.println("<h1>OSC Settings Saved</h1>");
   client.println("<p>OSC settings have been saved successfully. For changes to take full effect, you may have to restart the device.</p>");
-  client.println("<p><a href='/osc_settings'>Return to OSC settings</a></p>");
+  client.println("<p><a href='/'>Return to settings</a></p>");
   client.println("</div></body></html>");
 
-    saveNetworkConfig();
+  // Save both network config (for OSC settings) and fader config (for sendKeystrokes)
+  saveNetworkConfig();
+  saveFaderConfig();  // NEW: Save fader config for sendKeystrokes setting
     
-    restartUDP();
+//  restartUDP(); we do this inside of savenetworkconfig now
 
   debugPrint("OSC settings saved successfully");
-
 }
 
 
@@ -760,7 +825,7 @@ void sendRedirect() {
 }
 
 // Helper function to send CSS styles
-void sendCommonStyles() {
+void sendCommonStylesLight() {
   client.println("<style>");
   client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f0f0; }");
   client.println(".header { background: #1976d2; color: white; padding: 20px; text-align: center; }");
@@ -780,6 +845,29 @@ void sendCommonStyles() {
   client.println(".divider { border-top: 1px solid #ddd; margin: 20px 0; }");
   client.println("</style>");
 }
+
+// Helper function to send CSS styles
+void sendCommonStyles() {
+  client.println("<style>");
+  client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #202325; color: #e8e6e3; }");
+  client.println(".header { background: #145ea8; color: #e8e6e3; padding: 20px; text-align: center; }");
+  client.println(".header h1 { margin: 0; font-size: 24px; }");
+  client.println(".header p { margin: 5px 0; font-size: 14px; }");
+  client.println(".nav { background: #262a2b; padding: 10px; text-align: center; }");
+  client.println(".nav a { color: #e8e6e3; text-decoration: none; padding: 5px 15px; margin: 0 5px; }");
+  client.println(".nav a:hover { background: #404548; }");
+  client.println(".container { max-width: 600px; margin: 20px auto; padding: 0 20px; }");
+  client.println(".card { background: #181a1b; padding: 20px; margin-bottom: 20px; border: 1px solid #3a3e41; color: #e8e6e3; }");
+  client.println(".card h2 { margin: top: 0; font-size: 20px; border-bottom: 1px solid #3a3e41; padding-bottom: 10px; }");
+  client.println("input[type='text'], input[type='number'], select { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; background: #262a2b; color: #e8e6e3; border: 1px solid #3a3e41; }");
+  client.println("label { display: block; margin-top: 10px; font-weight: bold; color: #e8e6e3; }");
+  client.println(".help { font-size: 12px; color: #a8a095; margin-top: 2px; }");
+  client.println("button { background: #145ea8; color: #e8e6e3; padding: 10px 20px; border: none; cursor: pointer; width: 100%; margin-top: 10px; }");
+  client.println("button:hover { background: #11519a; }");
+  client.println(".divider { border-top: 1px solid #3a3e41; margin: 20px 0; }");
+  client.println("</style>");
+}
+
 
 // Helper function to send navigation header
 void sendNavigationHeader(const char* pageTitle) {
@@ -811,7 +899,7 @@ void handleStatsPage() {
   client.println("<style>");
   client.println("table { width: 100%; border-collapse: collapse; }");
   client.println("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
-  client.println("th { background: #f0f0f0; }");
+  client.println("th { background: #145ea8; }");
   client.println("</style>");
   client.println("</head><body>");
   
@@ -934,6 +1022,14 @@ waitForWriteSpace();
   client.print(Fconfig.touchedBrightness);
   client.println("' min='0' max='255'>");
   client.println("<p class='help-text'>LED brightness when fader is touched (0-255)</p>");
+  client.println("</div>");
+
+  client.println("<div class='form-group'>");
+  client.println("<label>Fade Time</label>");
+  client.print("<input type='number' name='fadeTime' value='");
+  client.print(Fconfig.fadeTime);
+  client.println("' min='0' max='10000'>");
+  client.println("<p class='help-text'>Time in ms that the leds will fade</p>");
   client.println("</div>");
   
   client.println("<button type='submit' class='btn btn-primary btn-block'>Save Fader Settings</button>");
@@ -1120,4 +1216,76 @@ void waitForWriteSpace() {
   while (client.connected() && client.availableForWrite() < 100) {
     delay(1);
   }
+}
+
+
+
+void handleGMA3ShortcutsDownload() {
+  debugPrint("Serving GMA3 shortcuts XML file download...");
+  
+  // Your GMA3 shortcuts XML content
+  const char* xmlContent = R"(<?xml version="1.0" encoding="UTF-8"?>
+<GMA3 DataVersion="1.9.3.3">
+    <KeyboardShortCuts KeyboardShortcutsActive="Yes">
+        <!-- Row 1 (101-110) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="101" Shortcut="Z" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="102" Shortcut="X" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="103" Shortcut="C" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="104" Shortcut="V" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="105" Shortcut="B" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="106" Shortcut="N" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="107" Shortcut="M" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="108" Shortcut="Comma" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="109" Shortcut="Period" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="110" Shortcut="Slash" />
+        
+        <!-- Row 2 (201-210) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="201" Shortcut="A" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="202" Shortcut="S" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="203" Shortcut="D" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="204" Shortcut="F" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="205" Shortcut="G" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="206" Shortcut="H" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="207" Shortcut="J" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="208" Shortcut="K" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="209" Shortcut="L" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="210" Shortcut="Semicolon" />
+        
+        <!-- Row 3 (301-310) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="301" Shortcut="Q" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="302" Shortcut="W" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="303" Shortcut="E" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="304" Shortcut="R" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="305" Shortcut="T" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="306" Shortcut="Y" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="307" Shortcut="U" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="308" Shortcut="I" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="309" Shortcut="O" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="310" Shortcut="P" />
+        
+        <!-- Row 4 (401-410) -->
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="401" Shortcut="Apostrophe" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="402" Shortcut="Space" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="403" Shortcut="Tab" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="404" Shortcut="GraveAccent" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="405" Shortcut="Left" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="406" Shortcut="Right" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="407" Shortcut="Up" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="408" Shortcut="Down" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="409" Shortcut="Backslash" />
+        <KeyboardShortcut Lock="Yes" KeyCode="EXEC" ExecutorIndex="410" Shortcut="CapsLock" />
+    </KeyboardShortCuts>
+</GMA3>)";
+
+  // Send headers for file download
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/xml");
+  client.println("Content-Disposition: attachment; filename=\"EvoFaderWing_keyboard_shortcuts.xml\"");
+  client.print("Content-Length: ");
+  client.println(strlen(xmlContent));
+  client.println("Connection: close");
+  client.println();
+  
+  // Send the XML content
+  client.print(xmlContent);
 }

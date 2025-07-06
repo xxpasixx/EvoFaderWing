@@ -40,8 +40,10 @@ FaderConfig Fconfig = {
   .sendTolerance = SEND_TOLERANCE,
   .baseBrightness = 5,
   .touchedBrightness = 40,
-  .fadeTime = 1000,
-  .serialDebug = debugMode
+  .fadeTime = 500,
+  .serialDebug = debugMode,
+  .sendKeystrokes = false
+
 };
 
 //================================
@@ -53,12 +55,15 @@ NetworkConfig netConfig = {
   IPAddress(192, 168, 0, 169),     // staticIP
   IPAddress(192, 168, 0, 1),       // gateway
   IPAddress(255, 255, 255, 0),     // subnet
-  IPAddress(192, 168, 0, 100),     // sendToIP (OSC target)
+  IPAddress(192, 168, 0, 10),     // sendToIP (OSC target)
   8000,                            // receivePort (OSC listening)
   9000,                            // sendPort (OSC destination)
   true                             // useDHCP (fallback to static if false)
 };
 
+// Network reset check
+bool checkForReset = true;
+unsigned long resetCheckStartTime = 0;
 
 
 //================================
@@ -77,11 +82,6 @@ NetworkConfig netConfig = {
 int autoCalibrationMode = 2;     // 0 = Off, 1 = Normal, 2 = Conservative
 uint8_t touchThreshold = 12;     // Higher = less sensitive
 uint8_t releaseThreshold = 6;    // Lower = harder to release
-
-
-//Network reset check
-bool checkForReset = true;
-unsigned long resetCheckStartTime = 0;
 
 
 // Page Tracking

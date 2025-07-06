@@ -21,5 +21,11 @@ void setupNeoPixels();
 void updateNeoPixels();
 void updateBaseBrightnessPixels();
 
+void updateBrightnessOnFaderTouchChange();
+
+void fadeSequence(unsigned long STAGGER_DELAY, unsigned long COLOR_CYCLE_TIME);
+void flashAllFadersRed();
+
+uint32_t getScaledColor(const Fader& fader);
 
 #endif // NEOPIXEL_CONTROL_H

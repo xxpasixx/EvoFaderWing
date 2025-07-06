@@ -11,6 +11,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <IPAddress.h>
+#include <memory>  // Added for std::unique_ptr
 
 // === OLED Configuration Constants ===
 #define SCREEN_WIDTH 128        // OLED display width in pixels
@@ -31,7 +32,7 @@
 // === OLED Wrapper Class ===
 class OLED {
 private:
-    Adafruit_SSD1306* oledDisplay;     // Pointer to Adafruit display object
+    std::unique_ptr<Adafruit_SSD1306> oledDisplay;  // Changed to smart pointer
     uint8_t i2cAddress;                // Current I2C address being used
     bool displayInitialized;           // Flag to track initialization status
     
@@ -43,7 +44,7 @@ private:
 public:
     // === Constructor and Destructor ===
     OLED();
-    ~OLED();
+    ~OLED();  // Still needed to explicitly declare it
     
     // === Public Initialization Functions ===
     bool begin();                          // Auto-detect address and initialize display
@@ -100,11 +101,10 @@ public:
     void clearDebugLines();
 };
 
-// === External Debug Functions (assumed to exist in your project) ===
-// These should be defined in your main project's Utils.cpp or similar
+// === External Debug Functions  ===
 extern void debugPrint(const char* message);
 extern void debugPrintf(const char* format, ...);
 
-extern OLED display;  // <- declaration
+extern OLED display;
 
 #endif // OLED_H

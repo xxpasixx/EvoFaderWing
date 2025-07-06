@@ -1,9 +1,8 @@
 // i2cPolling.cpp
 
 // === TEENSY 4.1 I2C POLLING MASTER ===
-// Polls 5 ATmega slaves for keyboard and encoder data ONLY
+// Polls 5 ATmega slaves for keyboard and encoder data
 // No interrupt pins needed - pure polling approach
-// Simplified version - handles ONLY encoder rotation and keypress events
 // NO button press handling - encoders send rotation data, keyboard sends key events
 
 #include <Wire.h>
@@ -11,6 +10,7 @@
 #include "Utils.h"
 #include "EEPROMStorage.h"
 #include "NetworkOSC.h"
+#include "Keysend.h"
 
 // === I2C Slave Addresses ===
 #define I2C_ADDR_KEYBOARD  0x10  // Keyboard matrix ATmega - sends keypress data
@@ -34,12 +34,13 @@ const int numSlaves = sizeof(slaveAddresses) / sizeof(slaveAddresses[0]);
 #define DATA_TYPE_ENCODER  0x01  // Data type identifier for encoder rotation messages
 #define DATA_TYPE_KEYPRESS 0x02  // Data type identifier for keypress/release messages
 
-// === Simplified Timing Variables (separate from original) ===
+// === Timing Variables ===
 unsigned long lastPollTimeSimple = 0;          
 const unsigned long I2C_POLL_INTERVAL_SIMPLE = 10;    // Poll every 10ms instead of 1ms
+int resetPressCount = 0;
 
-// === SIMPLIFIED SETUP FUNCTION ===
-// Call this INSTEAD of setupI2cPolling() in your main setup()
+// === SETUP FUNCTION ===
+
 void setupI2cPolling() {
   Wire.begin();                
   Wire.setClock(400000);       // 400kHz
@@ -58,8 +59,8 @@ void setupI2cPolling() {
   debugPrint("[I2C] Ready for polling");
 }
 
-// === SIMPLIFIED MAIN POLLING FUNCTION ===
-// Call this INSTEAD of handleI2c() in your main loop()
+// === MAIN POLLING FUNCTION ===
+
 void handleI2c() { 
   unsigned long currentTime = millis();  
   
@@ -74,7 +75,7 @@ void handleI2c() {
   }
 }
 
-// === SIMPLIFIED SLAVE POLLING ===
+// === SLAVE POLLING ===
 void pollSlave(uint8_t address, int slaveIndex) {
   // Clear any leftover data first
   while (Wire.available()) Wire.read();
@@ -206,16 +207,17 @@ void processKeypressData(uint8_t count, uint8_t address) {
       continue;
     }
     
-    debugPrintf("  Key %d: %s", keyNumber, state ? "PRESSED" : "RELEASED");
+    //debugPrintf("  Key %d: %s", keyNumber, state ? "PRESSED" : "RELEASED");
     
         // Check for reset condition: key 401 pressed during startup window
     if (checkForReset && keyNumber == 401 && state == 1) {
-      debugPrint("[NETWORK RESET]");
-      displayShowResetHeader();
-      delay(3000);
-      resetNetworkDefaults();
-      checkForReset = false;  // Prevent multiple resets
-      return;  // Skip further processing of this event
+      ++resetPressCount;
+        if (resetPressCount >= 5) {
+          debugPrint("[NETWORK RESET]");
+          resetNetworkDefaults();
+          checkForReset = false;  // Prevent multiple resets
+          return;  // Skip further processing of this event
+        }
     }
 
       sendKeyOSC(keyNumber, state);
@@ -258,6 +260,57 @@ void sendEncoderOSC(int encoderNumber, bool isPositive, int velocity) {
 
 
 
+// Updated this function to send OSC or Keypress data over USB if that setting is checked
+// May update this function name or add a seperate function later to keep things cleaner
+
+void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
+  // Validate key number is in expected ranges
+  if (!((keyNumber >= 101 && keyNumber <= 110) ||
+        (keyNumber >= 201 && keyNumber <= 210) ||
+        (keyNumber >= 301 && keyNumber <= 310) ||
+        (keyNumber >= 401 && keyNumber <= 410))) {
+    debugPrintf("[OSC] Invalid key number for OSC: %d", keyNumber);
+    return;
+  }
+  
+  // Validate state
+  if (state > 1) {
+    debugPrintf("[OSC] Invalid key state: %d", state);
+    return;
+  }
+  
+  // Send keypress if option is checked
+  if (Fconfig.sendKeystrokes){
+
+    // Send press if 1 and release if 0
+    state ? sendKeyPress(keyNumber) : sendKeyRelease(keyNumber);
+
+    debugPrintf("[Key] Sent: %d %s", keyNumber, state ? "PRESSED" : "RELEASED");
+
+  } else {
+
+    // Create the OSC address
+    char oscAddress[32];
+    snprintf(oscAddress, sizeof(oscAddress), "/Key%d", keyNumber);
+    
+    // Convert state to int for OSC message
+    int keyState = (int)state;
+    
+    // Send the OSC message
+    sendOscMessage(oscAddress, ",i", &keyState);
+    
+    // Debug output
+    debugPrintf("[OSC] Sent: %s %d (key %d %s)", 
+              oscAddress, keyState, keyNumber, state ? "PRESSED" : "RELEASED");
+
+  }
+
+}
+
+
+
+
+
 // === PERFORMANCE MEASUREMENT FUNCTION ===
 // Alternative polling function that measures the time taken to poll all slaves
 // Useful for performance tuning and verifying that polling stays within timing budget
@@ -277,36 +330,4 @@ void measurePollingSpeed() {
   
   // Note: With 5 slaves at 400kHz I2C, total time should be around 2000-3000 microseconds
   // This leaves plenty of time in each 1ms polling cycle for other system operations
-}
-
-
-void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
-  // Validate key number is in expected ranges
-  if (!((keyNumber >= 101 && keyNumber <= 110) ||
-        (keyNumber >= 201 && keyNumber <= 210) ||
-        (keyNumber >= 301 && keyNumber <= 310) ||
-        (keyNumber >= 401 && keyNumber <= 410))) {
-    debugPrintf("[OSC] Invalid key number for OSC: %d", keyNumber);
-    return;
-  }
-  
-  // Validate state
-  if (state > 1) {
-    debugPrintf("[OSC] Invalid key state: %d", state);
-    return;
-  }
-  
-  // Create the OSC address
-  char oscAddress[32];
-  snprintf(oscAddress, sizeof(oscAddress), "/Key%d", keyNumber);
-  
-  // Convert state to int for OSC message
-  int keyState = (int)state;
-  
-  // Send the OSC message
-  sendOscMessage(oscAddress, ",i", &keyState);
-  
-  // Debug output
-  debugPrintf("[OSC] Sent: %s %d (key %d %s)", 
-             oscAddress, keyState, keyNumber, state ? "PRESSED" : "RELEASED");
 }

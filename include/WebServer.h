@@ -53,6 +53,9 @@ void handleOSCSettingsPage();
 void sendCommonStyles();
 void sendNavigationHeader(const char* pageTitle);
 
+void handleGMA3ShortcutsDownload();
+void handleLuaDownload();
+
 void waitForWriteSpace();
 
 // Response helpers

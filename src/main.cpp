@@ -3,12 +3,10 @@
 
 // Teensy 4.1
 
-
 #include <Arduino.h>
 #include <QNEthernet.h>
 #include <LiteOSCParser.h>
 
-// Include all our modular components
 #include "Config.h"
 #include "EEPROMStorage.h"
 #include "TouchSensor.h"
@@ -19,11 +17,11 @@
 #include "Utils.h"
 #include "i2cPolling.h"
 #include "OLED.h"
+#include "Keysend.h"
 
 using namespace qindesign::network;
 using qindesign::osc::LiteOSCParser;
 
-void updateBrightnessOnFaderTouchChange();
 
 unsigned long lastI2CPollTime = 0;     // Time of last I2C poll cycle
 
@@ -35,11 +33,13 @@ IPAddress currentIP;      // define currentIP
 //================================
 
 void setup() {
-  // Serial setup
+  // Start up keyboard first to make sure of enum in windows
+  initKeyboard();
+
   Serial.begin(SERIAL_BAUD);
   while (!Serial && millis() < 4000) {}
   
-  debugPrint("GMA3 FaderWing init...");
+  debugPrint("EvoFaderWing init...");
 
   // Initialize faders
   initializeFaders();
@@ -47,8 +47,11 @@ void setup() {
   
   // Initialize Touch MPR121 
   if (!setupTouch()) {
-    debugPrint("Touch sensor initialization failed!");
+    debugPrint("Touch sensor init failed!");
   }
+
+    // Start NeoPixels
+  setupNeoPixels();
 
     // Check calibration will load calibration data if present ortherwise it will run calibration
   checkCalibration(); 
@@ -71,13 +74,9 @@ void setup() {
 
   // Start web server for configuration
   startWebServer();
-  
-  // Start NeoPixels
-  setupNeoPixels();
 
-  // Check if we need to run calibration
-  checkCalibration();  
-  
+  fadeSequence(50,1000); // Cool effect so we know we are booted up
+
   //Network reset check
   resetCheckStartTime = millis();
 
@@ -85,14 +84,17 @@ void setup() {
 }
 
 void loop() {
-  // Network reset check exiry
-  if (checkForReset && (millis() - resetCheckStartTime > 10000)) {
+  // Network reset check exiry PRESS 401 5 times during this time for network reset
+
+  if (checkForReset && (millis() - resetCheckStartTime > 5000)) {
     checkForReset = false;
     debugPrint("[RESET] Reset check window expired.");
   }
   
 // Process OSC messages
-  handleOscMessage();
+  handleIncomingOsc();
+  
+  checkFaderRetry();  // Check for hung fader
 
   // Check for manual fader movement
   handleFaders();
@@ -101,17 +103,17 @@ void loop() {
   handleI2c();
 
     
-  // Process touch changes - this function already checks the flag internally
+  // Process touch changes 
   if (processTouchChanges()) {
     updateBrightnessOnFaderTouchChange();
-    printFaderTouchStates();
+    printFaderTouchStates();                //verbose debug output
   }
 
   // Check for web requests
   pollWebServer();
   
 
-  // Handle touch sensor errors
+  // Handle touch sensor errors, no longer needed used for debugging
   if (hasTouchError()) {
     debugPrint(getLastTouchError().c_str());
     clearTouchError();
@@ -120,22 +122,22 @@ void loop() {
     // Update NeoPixels
   updateNeoPixels();
 
-  
+  // Check for reboot from serial, used for uploading firmware without having to press physical button
   checkSerialForReboot();
 
-  yield(); // Let the Teensy do background tasks
 }
 
-void displayIPAddress(){
 
+// oled display functions
+
+void displayIPAddress(){
   display.clear();
-  // Show IP address
   currentIP = Ethernet.localIP();
   display.showIPAddress(currentIP,netConfig.receivePort,netConfig.sendToIP,netConfig.sendPort);
 
 }
 
 void displayShowResetHeader(){
-
+  display.clear();
   display.showHeader("Network Reset");
 }

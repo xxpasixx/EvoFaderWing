@@ -4,11 +4,11 @@
 
 #include <Arduino.h>
 #include <IPAddress.h>
-#include <PID_v1.h>
 
 //================================
 // HARDWARE CONFIGURATION
 //================================
+#define SW_VERSION      "0.2"
 
 // Fader configuration
 #define NUM_FADERS      10       // Total number of motorized faders
@@ -16,12 +16,14 @@
 
 // Motor control settings
 #define DEFAULT_PWM     100      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100
-#define CALIB_PWM       80      // Reduced motor speed during auto-calibration phase
+#define CALIB_PWM       80       // Reduced motor speed during auto-calibration phase
 #define MIN_PWM         45       // Minimum PWM to overcome motor inertia
+#define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
+#define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
 
 // Fader position tolerances
-#define TARGET_TOLERANCE 1      // OSC VALUE How close (in analog units) fader must be to setpoint to consider "done"
-#define SEND_TOLERANCE   2       // Also osc value now
+#define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
+#define SEND_TOLERANCE   2       // Amout of change in OSC (0-100) before senind an osc update
 
 // Calibration settings
 #define PLATEAU_THRESH   2       // Threshold (analog delta) to consider that the fader has stopped moving
@@ -68,7 +70,7 @@ extern const uint16_t OSC_IDS[NUM_FADERS];
 //================================
 constexpr uint32_t kDHCPTimeout = 15000;  // Timeout for DHCP in milliseconds
 constexpr uint16_t kOSCPort = 8000;       // Default OSC port
-constexpr char kServiceName[] = "gma3-faderwing"; // mDNS service name
+constexpr char kServiceName[] = "evofaderwing"; // mDNS service name and Hostname
 
 // Network configuration structure
 struct NetworkConfig {
@@ -96,6 +98,7 @@ struct FaderConfig {
   uint8_t touchedBrightness;      // Brightness when fader is touched
   unsigned long fadeTime;         // Fade duration in milliseconds
   bool serialDebug;
+  bool sendKeystrokes;       // Send keystroke using usb rather than osc for exec keys, this gives more native support (can store using exec key directly)
 };
 
 // Touch sensor configuration
@@ -103,7 +106,7 @@ struct TouchConfig {
   uint8_t autoCalibrationMode;  // 0=disabled, 1=normal, 2=conservative (default)
   uint8_t touchThreshold;       // Default 12, higher = less sensitive
   uint8_t releaseThreshold;     // Default 6, lower = harder to release
-  uint8_t reserved[5];          // Reserved space for future touch parameters
+  uint8_t reserved[5];          // Reserved space for future touch parameters (unused for now)
 };
 
 //================================
@@ -118,18 +121,13 @@ struct Fader {
   int minVal;               // Calibrated analog min
   int maxVal;               // Calibrated analog max
 
-  double setpoint;          // Target position
-  double current;           // Current analog reading
+  uint8_t setpoint;          // Target position
 
-  double motorOutput;       // PID output
-  double lastMotorOutput;   // Last motor output for velocity limiting
+  uint8_t lastReportedValue;    // Last value printed or sent
+  uint8_t lastSentOscValue;     // Last value sent via OSC
 
-
-  int lastReportedValue;    // Last value printed or sent
-  unsigned long lastMoveTime; // Time of last movement
   unsigned long lastOscSendTime; // Time of last OSC message
-  int lastSentOscValue;     // Last value sent via OSC
-  bool suppressOSCOut;     // Suppress OSC out or Not
+
   uint16_t oscID;           // OSC ID like 201 for /Page2/Fader201
   
 

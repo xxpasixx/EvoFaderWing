@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include "FaderControl.h"
 #include "NetworkOSC.h"
+#include "NeoPixelControl.h"
 
 //================================
 // CALIBRATION FUNCTIONS
@@ -19,6 +20,7 @@ void saveCalibration() {
     EEPROM.put(addr, faders[i].maxVal); addr += sizeof(int);
   }
   debugPrint("Calibration saved.");
+
 }
 
 void loadCalibration() {
@@ -122,6 +124,7 @@ void saveNetworkConfig() {
   if (oldConfig.useDHCP != netConfig.useDHCP) configChanged = true;
 
   if (configChanged) {
+    restartUDP();
     Ethernet.end();
     setupNetwork();  // includes udp.begin(newReceivePort)
   }
@@ -177,6 +180,7 @@ void saveTouchConfig() {
   EEPROM.put(EEPROM_TOUCH_DATA_ADDR, touchConfig);
   
   debugPrint("Touch sensor configuration saved to EEPROM.");
+
 }
 
 void loadTouchConfig() {
@@ -233,12 +237,16 @@ void resetToDefaults() {
   Fconfig.calibratePwm = CALIB_PWM;
   Fconfig.targetTolerance = TARGET_TOLERANCE;
   Fconfig.sendTolerance = SEND_TOLERANCE;
-  
+  Fconfig.baseBrightness = 5;
+  Fconfig.touchedBrightness = 40;
+  Fconfig.fadeTime = 1000;
+  Fconfig.serialDebug = false;
+
   
   // Reset touch settings
-  autoCalibrationMode = 2; // Default value (conservative)
-  touchThreshold = 12;     // Default value
-  releaseThreshold = 6;    // Default value
+  autoCalibrationMode = 2;
+  touchThreshold = 12;
+  releaseThreshold = 6;
   
   setAutoTouchCalibration(autoCalibrationMode);
   manualTouchCalibration();
@@ -261,6 +269,10 @@ void resetNetworkDefaults() {
   
   // Save to EEPROM
   saveNetworkConfig();
+
+  flashAllFadersRed();
+  displayShowResetHeader();
+  delay(3000);
   
    displayIPAddress();
 
@@ -272,6 +284,11 @@ void resetNetworkDefaults() {
 //================================
 
 void dumpEepromConfig() {
+
+  bool currentDebugMode = debugMode;
+
+  debugMode = true;
+
   debugPrint("\n===== EEPROM CONFIGURATION DUMP =====\n");
   
   // Check calibration data
@@ -309,6 +326,7 @@ void dumpEepromConfig() {
     debugPrintf("Touched Brightness: %d\n", storedConfig.touchedBrightness);
     debugPrintf("Fade Time (ms): %d\n", storedConfig.fadeTime);
     debugPrintf("Serial Debug: %s\n", storedConfig.serialDebug ? "Enabled" : "Disabled");
+    debugPrintf("Send Keystrokes: %s\n", storedConfig.sendKeystrokes ? "Enabled" : "Disabled");
     
   } else {
     debugPrintf("Fader config not found (signature=0x%02X, expected=0x%02X)\n", 
@@ -366,4 +384,9 @@ void dumpEepromConfig() {
 
   
   debugPrint("\n===== END OF EEPROM DUMP =====\n");
+
+  debugMode = currentDebugMode;
+
+  displayIPAddress();
+
 }
