@@ -101,8 +101,6 @@ void moveAllFadersToSetpoints() {
       if (abs(difference) > Fconfig.targetTolerance && !f.touched) {
         allFadersAtTarget = false; // At least one fader is not at target
         
-        
-
         if (difference > 0) {
           // Need to move up
           int pwm = calculateVelocityPWM(difference);
@@ -141,6 +139,7 @@ void moveAllFadersToSetpoints() {
         
         if (abs(difference) > Fconfig.targetTolerance && !faders[i].touched) {
           // Flash red 3 times for failed faders
+          
           uint8_t origR = faders[i].red, origG = faders[i].green, origB = faders[i].blue;
           for (int flash = 0; flash < 3; flash++) {
             faders[i].red = 255; faders[i].green = 0; faders[i].blue = 0;
@@ -262,7 +261,6 @@ void sendFaderOsc(Fader& f, int value, bool force) {
     
     debugPrintf("Sending OSC update for Fader %d on Page %d → value: %d\n", f.oscID, currentOSCPage, value);
     
-    // Use the existing sendOscMessage function instead of manual buffer building
     sendOscMessage(oscAddress, ",i", &value);
     
     f.lastOscSendTime = now;

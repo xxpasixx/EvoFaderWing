@@ -1,9 +1,8 @@
 // i2cPolling.cpp
 
 // === TEENSY 4.1 I2C POLLING MASTER ===
-// Polls 5 ATmega slaves for keyboard and encoder data ONLY
+// Polls 5 ATmega slaves for keyboard and encoder data
 // No interrupt pins needed - pure polling approach
-// Simplified version - handles ONLY encoder rotation and keypress events
 // NO button press handling - encoders send rotation data, keyboard sends key events
 
 #include <Wire.h>
@@ -259,6 +258,10 @@ void sendEncoderOSC(int encoderNumber, bool isPositive, int velocity) {
 
 }
 
+
+
+// Updated this function to send OSC or Keypress data over USB if that setting is checked
+// May update this function name or add a seperate function later to keep things cleaner
 
 void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
   // Validate key number is in expected ranges

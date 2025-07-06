@@ -22,7 +22,6 @@
 using namespace qindesign::network;
 using qindesign::osc::LiteOSCParser;
 
-void updateBrightnessOnFaderTouchChange();
 
 unsigned long lastI2CPollTime = 0;     // Time of last I2C poll cycle
 
@@ -40,7 +39,7 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
   while (!Serial && millis() < 4000) {}
   
-  debugPrint("GMA3 FaderWing init...");
+  debugPrint("EvoFaderWing init...");
 
   // Initialize faders
   initializeFaders();
@@ -48,7 +47,7 @@ void setup() {
   
   // Initialize Touch MPR121 
   if (!setupTouch()) {
-    debugPrint("Touch sensor initialization failed!");
+    debugPrint("Touch sensor init failed!");
   }
 
     // Start NeoPixels
@@ -76,9 +75,8 @@ void setup() {
   // Start web server for configuration
   startWebServer();
 
-  fadeSequence(50,1000);
+  fadeSequence(50,1000); // Cool effect so we know we are booted up
 
-  
   //Network reset check
   resetCheckStartTime = millis();
 
@@ -95,18 +93,17 @@ void loop() {
   
 // Process OSC messages
   handleIncomingOsc();
-
-  // Check for manual fader movement
   
   checkFaderRetry();  // Check for hung fader
 
+  // Check for manual fader movement
   handleFaders();
 
   // Handle I2C Polling for encoders keypresses and encoder key press
   handleI2c();
 
     
-  // Process touch changes - this function already checks the flag internally
+  // Process touch changes 
   if (processTouchChanges()) {
     updateBrightnessOnFaderTouchChange();
     printFaderTouchStates();                //verbose debug output
@@ -116,7 +113,7 @@ void loop() {
   pollWebServer();
   
 
-  // Handle touch sensor errors
+  // Handle touch sensor errors, no longer needed used for debugging
   if (hasTouchError()) {
     debugPrint(getLastTouchError().c_str());
     clearTouchError();
@@ -125,13 +122,13 @@ void loop() {
     // Update NeoPixels
   updateNeoPixels();
 
-  
+  // Check for reboot from serial, used for uploading firmware without having to press physical button
   checkSerialForReboot();
 
 }
 
 
-// #### oled display functions ####
+// oled display functions
 
 void displayIPAddress(){
   display.clear();

@@ -3,6 +3,7 @@
 #include <Keyboard.h>
 
 // Does not include modifier keys as this can be problematic for holding exec keys
+// May put allowing modifier keys on the roadmap for later though
 
 // Structure to hold key mapping
 struct KeyMapping {

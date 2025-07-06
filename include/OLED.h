@@ -101,11 +101,10 @@ public:
     void clearDebugLines();
 };
 
-// === External Debug Functions (assumed to exist in your project) ===
-// These should be defined in your main project's Utils.cpp or similar
+// === External Debug Functions  ===
 extern void debugPrint(const char* message);
 extern void debugPrintf(const char* format, ...);
 
-extern OLED display;  // <- declaration
+extern OLED display;
 
 #endif // OLED_H

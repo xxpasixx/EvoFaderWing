@@ -10,6 +10,9 @@
 //================================
 
 // EEPROM signature constants - Each different data type gets its own signature byte
+
+// Change signature when changing adding/subtracting settings too reset the eeprom data with defualts
+
 #define CALCFG_EEPROM_SIGNATURE 0xA4    // Signature for fader calibration
 #define FADERCFG_EEPROM_SIGNATURE 0xB4    // Signature for fader configuration
 #define NETCFG_EEPROM_SIGNATURE 0x5B    // Signature for network config

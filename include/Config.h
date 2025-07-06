@@ -16,13 +16,13 @@
 
 // Motor control settings
 #define DEFAULT_PWM     100      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100
-#define CALIB_PWM       80      // Reduced motor speed during auto-calibration phase
+#define CALIB_PWM       80       // Reduced motor speed during auto-calibration phase
 #define MIN_PWM         45       // Minimum PWM to overcome motor inertia
-#define FADER_MOVE_TIMEOUT     2000   //Time in MS a fader must not be moving before force stopped
+#define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
 #define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
 
 // Fader position tolerances
-#define TARGET_TOLERANCE 1      // OSC VALUE How close the fader must be to setpoint to consider "done"
+#define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
 #define SEND_TOLERANCE   2       // Amout of change in OSC (0-100) before senind an osc update
 
 // Calibration settings
@@ -106,7 +106,7 @@ struct TouchConfig {
   uint8_t autoCalibrationMode;  // 0=disabled, 1=normal, 2=conservative (default)
   uint8_t touchThreshold;       // Default 12, higher = less sensitive
   uint8_t releaseThreshold;     // Default 6, lower = harder to release
-  uint8_t reserved[5];          // Reserved space for future touch parameters
+  uint8_t reserved[5];          // Reserved space for future touch parameters (unused for now)
 };
 
 //================================
