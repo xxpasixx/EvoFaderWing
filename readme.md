@@ -29,7 +29,7 @@
 
 [Wiring Diagrams](https://github.com/stagehandshawn/EvoFaderWing/wiki/Wiring-Diagrams)
 
-Any questions can be sent to me at [stagehandshawn@gmail.com](mailto:stagehandshawn@gmail.com). I'll help when I can.
+I have added discussions to the repo so any questions can be asked there. 
 
 ---
 ## Project Images
