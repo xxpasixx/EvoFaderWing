@@ -29,6 +29,8 @@
 
 [Wiring Diagrams](https://github.com/stagehandshawn/EvoFaderWing/wiki/Wiring-Diagrams)
 
+[Assembly](https://github.com/stagehandshawn/EvoFaderWing/wiki/Assembly)
+
 I have added discussions to the repo so any questions can be asked there. 
 
 ---
