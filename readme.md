@@ -20,7 +20,7 @@
       </blockquote>
     </td>
     <td width="30%" align="right" valign="top">
-      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_left_front.jpg" alt="faderwing" width="350">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_left_front.png" alt="faderwing" width="350">
     </td>
   </tr>
 </table>
@@ -39,15 +39,15 @@ I have added discussions to the repo so any questions can be asked there.
 <table>
   <tr>
     <td width="50%">
-      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_top1.jpg" alt="faderwing top" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_top1.png" alt="faderwing top" width="100%">
     </td>
     <td width="50%">
-      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_right.jpg" alt="faderwing right side" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_right.png" alt="faderwing right side" width="100%">
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_back.jpg" alt="faderwing back" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_back.png" alt="faderwing back" width="100%">
     </td>
     <td width="50%">
       <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_elec_bay.jpg" alt="electronics bay" width="100%">
@@ -87,6 +87,6 @@ The Lua script `/lua/EvoFaderWingOSC.lua` will poll executors and send updates t
 ![OscSettings](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/OscSettings.png)
 
 ## For a complete setup add [EvoCmdWing](https://github.com/stagehandshawn/EvoCmdWing)
-![evocmdfaderwing](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_cmdwing.jpg?raw=true)
+![evocmdfaderwing](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_cmdwing.png?raw=true)
 
 More to come. Thank you for checking out my project!
