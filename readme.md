@@ -86,4 +86,7 @@ The Lua script `/lua/EvoFaderWingOSC.lua` will poll executors and send updates t
 
 ![OscSettings](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/OscSettings.png)
 
+## For a complete setup add [EvoCmdWing](https://github.com/stagehandshawn/EvoCmdWing)
+![evocmdfaderwing](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_cmdwing.jpg?raw=true)
+
 More to come. Thank you for checking out my project!
