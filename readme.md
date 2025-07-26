@@ -20,7 +20,7 @@
       </blockquote>
     </td>
     <td width="30%" align="right" valign="top">
-      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_left_front.jpg" alt="faderwing" width="350">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_left_front.jpg" alt="faderwing" width="350">
     </td>
   </tr>
 </table>
@@ -39,18 +39,18 @@ I have added discussions to the repo so any questions can be asked there.
 <table>
   <tr>
     <td width="50%">
-      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_top1.jpg" alt="faderwing top" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_top1.jpg" alt="faderwing top" width="100%">
     </td>
     <td width="50%">
-      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_right.jpg" alt="faderwing right side" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_right.jpg" alt="faderwing right side" width="100%">
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_back.jpg" alt="faderwing back" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_back.jpg" alt="faderwing back" width="100%">
     </td>
     <td width="50%">
-      <img src="https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_elec_bay.jpg" alt="electronics bay" width="100%">
+      <img src="https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/gallery/faderwing_elec_bay.jpg" alt="electronics bay" width="100%">
     </td>
   </tr>
 </table>
@@ -84,6 +84,6 @@ The Lua script `/lua/EvoFaderWingOSC.lua` will poll executors and send updates t
   - The second will be from outgoing messages and will be set to send.
   - Both will need to be set to a fader range of 100
 
-![OscSettings](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/OscSettings.png)
+![OscSettings](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/OscSettings.png)
 
 More to come. Thank you for checking out my project!
