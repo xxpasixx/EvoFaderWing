@@ -66,14 +66,21 @@ I have added discussions to the repo so any questions can be asked there.
   </tr>
 </table>
 
-**Watch the demo video**
+**Watch the demo videos**
 
+⏺ <table>
+    <tr>
+      <td width="30%">
 [![Watch the demo video](https://img.youtube.com/vi/cR3AajQKoAo/0.jpg)](https://www.youtube.com/watch?v=cR3AajQKoAo)
+      </td>
+      <td width="30%">
 [![Watch the demo video](https://img.youtube.com/vi/fbl81pGS5f4/0.jpg)](https://www.youtube.com/watch?v=fbl81pGS5f4)
-
----
-
----
+      </td>
+      <td width="30%">
+[![Watch the demo video](https://img.youtube.com/vi/7ICJlkqCzxY/0.jpg)](https://www.youtube.com/watch?v=7ICJlkqCzxY)
+      </td>
+    </tr>
+  </table>
 
 ## Required repositories
 
