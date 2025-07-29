@@ -6,6 +6,7 @@
 -- (600 = 30 seconds, since main loop runs every 0.05 seconds)
 -- Default is 300 (15 seconds)
 --
+-- ToDo: Update script to directly extract executor values using the method from EvoCmdWing
 -- Special thanks to xxpasixx for his pam-osc code which I modified for my project
 -- GPL3
 
