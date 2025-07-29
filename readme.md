@@ -33,7 +33,18 @@
 
 I have added discussions to the repo so any questions can be asked there. 
 
----
+## Features
+### Same quantity of control surfaces as grandMA3 onPC Fader Wing
+- 10 Motorized faders
+  - Touch sensitive
+  - LED backlit - follows appearances and brightens when touched
+  - Self calibrated fader range and touch sensitivity
+- 40 Executor keys (OSC or USB)
+   - Can send keystrokes using OSC to execute actions only
+   - USB allows you to apply actions (store, edit, etc.) using the hardware keys
+- 20 Executor Encoders
+- Web GUI
+
 ## Project Images
 
 <table>
