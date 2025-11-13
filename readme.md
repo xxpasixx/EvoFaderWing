@@ -104,6 +104,15 @@ The Lua script `/lua/EvoFaderWingOSC.lua` will poll executors and send updates t
 
 ![OscSettings](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/OscSettings.png)
 
+## Web GUI
+- Network Setup
+
+![NetowrkSetup](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/evofaderwing_webgui_network.png)
+
+- OSC Setup
+
+![OscSetup](https://raw.githubusercontent.com/stagehandshawn/EvoFaderWing/main/docs/evofaderwing_webgui_osc.png)
+
 ## For a complete setup add [EvoCmdWing](https://github.com/stagehandshawn/EvoCmdWing)
 ![evocmdfaderwing](https://github.com/stagehandshawn/EvoFaderWing/blob/main/docs/gallery/faderwing_cmdwing.png?raw=true)
 
