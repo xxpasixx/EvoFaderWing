@@ -19,8 +19,8 @@ void initializeFaders() {
     faders[i].pwmPin = PWM_PINS[i];
     faders[i].dirPin1 = DIR_PINS1[i];
     faders[i].dirPin2 = DIR_PINS2[i];
-    faders[i].minVal = 5;    //Keep default range small to avoid not being able to hit 0 and 100 percent
-    faders[i].maxVal = 250;  // we might lose a little precision but its better
+    faders[i].minVal = 10;    // Keep default range small to avoid not being able to hit 0 and 100 percent
+    faders[i].maxVal = 245;  // we might lose a little precision but its better
     faders[i].setpoint = 0;
     faders[i].lastReportedValue = -1;
     faders[i].lastOscSendTime = 0;
@@ -33,7 +33,6 @@ void initializeFaders() {
     faders[i].red = Fconfig.baseBrightness;
     faders[i].green = Fconfig.baseBrightness;
     faders[i].blue = Fconfig.baseBrightness;
-    faders[i].colorUpdated = true;
 
     // Initialize touch timing values
     faders[i].touched = false;
@@ -82,10 +81,12 @@ void configureFaderPins() {
 
 void calibrateFaders() {
   debugPrintf("Calibration started at PWM: %d\n", Fconfig.calibratePwm);
+  calibrationInProgress = true;
   
   // Store original colors before calibration
   uint8_t originalColors[NUM_FADERS][3];
   uint8_t originalPosition[NUM_FADERS];
+  bool failedFaders[NUM_FADERS] = {false};
 
   for (int i = 0; i < NUM_FADERS; i++) {
     originalColors[i][0] = faders[i].red;
@@ -118,14 +119,13 @@ void calibrateFaders() {
     
     // Add timeout for max calibration
     unsigned long startTime = millis();
-    bool calibrationSuccess = false;
+    bool maxCalibrationSuccess = false;
     
     while (plateau < PLATEAU_COUNT) {
       // Check for timeout (10 seconds)
       if ((millis() - startTime) > calibrationTimeout) {
-        debugPrintf("ERROR: Fader %d MAX calibration timed out! Using default value of 1023.\n", i);
-        f.maxVal = 250;  // Use default max value
-        calibrationSuccess = false;
+        debugPrintf("ERROR: Fader %d MAX calibration timed out! Using default value of 245.\n", i);
+        f.maxVal = 245;  // Use default max value
         break;  // Exit the loop
       }
       
@@ -139,7 +139,7 @@ void calibrateFaders() {
       
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
-        calibrationSuccess = true;
+        maxCalibrationSuccess = true;
         f.maxVal = last - 2;  //subtract a litle value to create a dead zone at top (sometimes required to reach)
       }
     }
@@ -166,9 +166,8 @@ void calibrateFaders() {
     while (plateau < PLATEAU_COUNT) {
       // Check for timeout 
       if ((millis() - startTime) > calibrationTimeout) {
-        debugPrintf("ERROR: Fader %d MIN calibration timed out! Using default value of 0.\n", i);
-        f.minVal = 5;  // Use default min value
-        minCalibrationSuccess = false;
+        debugPrintf("ERROR: Fader %d MIN calibration timed out! Using default value of 10.\n", i);
+        f.minVal = 10;  // Use default min value
         break;  // Exit the loop
       }
       
@@ -195,24 +194,64 @@ void calibrateFaders() {
     updateNeoPixels();
     
     // Output results with status indicator
-    if (calibrationSuccess && minCalibrationSuccess) {
+    bool rangeValid = true;
+    if (maxCalibrationSuccess && minCalibrationSuccess) {
+      // Validate min and max values: expect near full travel on 8-bit range (~20% margins)
+      bool minTooHigh = f.minVal > 51;    // >20% from bottom (255*0.2 ≈ 51)
+      bool maxTooLow = f.maxVal < 204;    // <80% of top (255-51)
+      bool spanTooSmall = (f.maxVal - f.minVal) < 153; // <60% span (255*0.6)
+
+      if (minTooHigh || maxTooLow || spanTooSmall) {
+        debugPrintf("ERROR: Fader %d has invalid range! Min=%d, Max=%d (minTooHigh=%d maxTooLow=%d spanTooSmall=%d). Using defaults.\n", 
+                    i, f.minVal, f.maxVal, minTooHigh, maxTooLow, spanTooSmall);
+        f.minVal = 10;
+        f.maxVal = 245;
+        rangeValid = false;
+      }
+    }
+
+    bool faderFailed = !maxCalibrationSuccess || !minCalibrationSuccess || !rangeValid;
+
+    if (maxCalibrationSuccess && minCalibrationSuccess && rangeValid) {
       debugPrintf("→ Calibration Done: Min=%d Max=%d\n", f.minVal, f.maxVal);
     } else {
       debugPrintf("→ Calibration INCOMPLETE for Fader %d: Min=%d Max=%d (Defaults applied where needed)\n", 
                   i, f.minVal, f.maxVal);
-    }
-    
-    // Validate min and max values
-    // If min > max or they're too close, use defaults
-    if (f.minVal >= f.maxVal || (f.maxVal - f.minVal) < 100) {
-      debugPrintf("ERROR: Fader %d has invalid range! Min=%d, Max=%d. Using defaults.\n", 
-                  i, f.minVal, f.maxVal);
-      f.minVal = 5;
-      f.maxVal = 250;
+      failedFaders[i] = true;
+      // Keep failure indicated in red
+      f.red = 255; f.green = 0; f.blue = 0;
+      updateNeoPixels();
     }
     
     // Reset setpoint
     f.setpoint = analogRead(f.analogPin);
+  }
+
+  // Flash failed faders at 10Hz for ~3 seconds to highlight issues
+  bool anyFailed = false;
+  for (int i = 0; i < NUM_FADERS; i++) {
+    if (failedFaders[i]) {
+      anyFailed = true;
+      break;
+    }
+  }
+
+  if (anyFailed) {
+    const int flashCycles = 30; // 10 Hz for ~3 seconds
+    for (int cycle = 0; cycle < flashCycles; cycle++) {
+      bool on = (cycle % 2 == 0);
+      for (int i = 0; i < NUM_FADERS; i++) {
+        if (!failedFaders[i]) {
+          continue;
+        }
+        uint32_t color = on ? pixels.Color(255, 0, 0) : pixels.Color(0, 0, 0);
+        for (int j = 0; j < PIXELS_PER_FADER; j++) {
+          pixels.setPixelColor(i * PIXELS_PER_FADER + j, color);
+        }
+      }
+      pixels.show();
+      delay(100);
+    }
   }
   
   // All faders done - restore original colors
@@ -229,4 +268,6 @@ void calibrateFaders() {
 
   //updateNeoPixels();
   moveAllFadersToSetpoints();
+
+  calibrationInProgress = false;
 }

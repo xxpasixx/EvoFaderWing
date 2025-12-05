@@ -10,11 +10,13 @@
 using namespace qindesign::network;
 using qindesign::osc::LiteOSCParser;
 
+class AsyncUDP;
+
 //================================
 // GLOBAL NETWORK OBJECTS
 //================================
 
-extern EthernetUDP udp;
+extern AsyncUDP oscUdp;
 
 //================================
 // FUNCTION DECLARATIONS
@@ -28,7 +30,6 @@ void restartUDP();
 
 // OSC message handling
 void sendFaderOsc(Fader& f, int value, bool force = false);
-void handleIncomingOsc();
 void sendOscMessage(const char* address, const char* typeTag, const void* value);
 
 // Page update

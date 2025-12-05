@@ -18,6 +18,7 @@
 #include "i2cPolling.h"
 #include "OLED.h"
 #include "Keysend.h"
+#include "KeyLedControl.h"
 
 using namespace qindesign::network;
 using qindesign::osc::LiteOSCParser;
@@ -50,8 +51,9 @@ void setup() {
     debugPrint("Touch sensor init failed!");
   }
 
-    // Start NeoPixels
+  // Start NeoPixels
   setupNeoPixels();
+  setupKeyLeds();
 
     // Check calibration will load calibration data if present ortherwise it will run calibration
   checkCalibration(); 
@@ -81,6 +83,7 @@ void setup() {
   resetCheckStartTime = millis();
 
   debugPrint("Initialization complete");
+
 }
 
 void loop() {
@@ -90,9 +93,6 @@ void loop() {
     checkForReset = false;
     debugPrint("[RESET] Reset check window expired.");
   }
-  
-// Process OSC messages
-  handleIncomingOsc();
   
   checkFaderRetry();  // Check for hung fader
 
@@ -121,6 +121,7 @@ void loop() {
   
     // Update NeoPixels
   updateNeoPixels();
+  updateKeyLeds();
 
   // Check for reboot from serial, used for uploading firmware without having to press physical button
   checkSerialForReboot();
@@ -131,7 +132,6 @@ void loop() {
 // oled display functions
 
 void displayIPAddress(){
-  display.clear();
   currentIP = Ethernet.localIP();
   display.showIPAddress(currentIP,netConfig.receivePort,netConfig.sendToIP,netConfig.sendPort);
 

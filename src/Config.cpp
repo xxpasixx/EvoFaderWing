@@ -34,16 +34,30 @@ const uint16_t OSC_IDS[NUM_FADERS] = {201, 202, 203, 204, 205, 206, 207, 208, 20
 // Default PID and motor tuning settings shared across all faders.
 FaderConfig Fconfig = {
   .minPwm = MIN_PWM,
-  .defaultPwm = DEFAULT_PWM,
+  .maxPwm = MAX_PWM,
   .calibratePwm = CALIB_PWM,
   .targetTolerance = TARGET_TOLERANCE,
   .sendTolerance = SEND_TOLERANCE,
+  .slowZone = SLOW_ZONE,
+  .fastZone = FAST_ZONE,
   .baseBrightness = 5,
   .touchedBrightness = 40,
   .fadeTime = 500,
   .serialDebug = debugMode,
-  .sendKeystrokes = false
+  .sendKeystrokes = false,
+  .useLevelPixels = false
 
+};
+
+// Executor LED defaults
+ExecConfig execConfig = {
+  .baseBrightness = EXECUTOR_BASE_BRIGHTNESS,
+  .activeBrightness = EXECUTOR_ACTIVE_BRIGHTNESS,
+  .useStaticColor = false,
+  .staticRed = 255,
+  .staticGreen = 255,
+  .staticBlue = 255,
+  .reserved = {0, 0}
 };
 
 //================================
@@ -65,6 +79,9 @@ NetworkConfig netConfig = {
 bool checkForReset = true;
 unsigned long resetCheckStartTime = 0;
 
+// Calibration state flag
+bool calibrationInProgress = false;
+
 
 //================================
 // DEBUG SETTINGS
@@ -79,7 +96,7 @@ unsigned long resetCheckStartTime = 0;
 // TOUCH SENSOR GLOBALS
 //================================
 // These are used by the MPR121 driver and web UI configuration.
-int autoCalibrationMode = 2;     // 0 = Off, 1 = Normal, 2 = Conservative
+int autoCalibrationMode = 1;     // 0 = Off, 1 = Autoconfig enabled
 uint8_t touchThreshold = 12;     // Higher = less sensitive
 uint8_t releaseThreshold = 6;    // Lower = harder to release
 

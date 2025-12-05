@@ -9,6 +9,9 @@
 #include "NeoPixelControl.h"
 #include "OLED.h"
 #include "NetworkOSC.h"
+#include "KeyLedControl.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 using namespace qindesign::network;
 
@@ -59,6 +62,23 @@ int constrainParam(int value, int minVal, int maxVal, int defaultVal) {
   return value;
 }
 
+bool parseHexColor(const String& hex, uint8_t& r, uint8_t& g, uint8_t& b) {
+  if (hex.length() != 7 || hex.charAt(0) != '#') {
+    return false;
+  }
+
+  char* endPtr = nullptr;
+  unsigned long value = strtoul(hex.c_str() + 1, &endPtr, 16);
+  if (endPtr == nullptr || *endPtr != '\0' || value > 0xFFFFFF) {
+    return false;
+  }
+
+  r = (value >> 16) & 0xFF;
+  g = (value >> 8) & 0xFF;
+  b = value & 0xFF;
+  return true;
+}
+
 
 void sendErrorResponse(const char* errorMsg) {
   client.println("HTTP/1.1 400 Bad Request");
@@ -67,6 +87,7 @@ void sendErrorResponse(const char* errorMsg) {
   client.println();
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
+  client.println("<link rel='icon' type='image/svg+xml' href='/favicon.svg'>");
   client.println("<style>");
   client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
   client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
@@ -168,7 +189,7 @@ void handleWebServer() {
                                 request.indexOf("dhcp=") >= 0 || 
                                 request.indexOf("gw=") >= 0 || request.indexOf("sn=") >= 0);
         bool hasOSCFields = (request.indexOf("osc_sendip=") >= 0 || request.indexOf("osc_sendport=") >= 0 || 
-                            request.indexOf("osc_receiveport=") >= 0 || request.indexOf("osc_settings=1") >= 0);
+                            request.indexOf("osc_receiveport=") >= 0);
         
         // Debug output to see what's being detected
         debugPrintf("hasNetworkFields: %s\n", hasNetworkFields ? "true" : "false");
@@ -190,14 +211,17 @@ void handleWebServer() {
         } else if (request.indexOf("calib_pwm=") >= 0) {
           requestType = 'C'; // Calibration settings
           debugPrint("Determined: Calibration settings");
-        } else if (request.indexOf("pidKp=") >= 0) {
-          requestType = 'P'; // PID settings
-          debugPrint("Determined: PID settings");
         } else if (request.indexOf("touchThreshold=") >= 0) {
           requestType = 'T'; // Touch settings
           debugPrint("Determined: Touch settings");
-        } else if (request.indexOf("minPwm=") >= 0 || request.indexOf("baseBrightness=") >= 0) {
-          requestType = 'F'; // Fader settings (including brightness)
+        } else if (request.indexOf("bb=") >= 0 || request.indexOf("tb=") >= 0 || 
+                   request.indexOf("ft=") >= 0 || request.indexOf("lp=") >= 0 ||
+                   request.indexOf("eb=") >= 0 || request.indexOf("ea=") >= 0 ||
+                   request.indexOf("sc=") >= 0 || request.indexOf("sch=") >= 0) {
+          requestType = 'V'; // LED settings only
+          debugPrint("Determined: LED settings");
+        } else if (request.indexOf("minPwm=") >= 0) {
+          requestType = 'F'; // Fader settings
           debugPrint("Determined: Fader settings");
         } else {
           debugPrint("ERROR: Could not determine request type");
@@ -211,16 +235,24 @@ void handleWebServer() {
         requestType = 'E'; // EEPROM dump
       } else if (path == "/reset_defaults" && method == "POST") {
         requestType = 'X'; // Reset to defaults
+      } else if (path == "/reboot" && method == "POST") {
+        requestType = 'B'; // Reboot
       } else if (path == "/reset_network" && method == "POST") {
         requestType = 'Z'; // Reset network settings
+      } else if (path == "/stats_data") {
+        requestType = 'Y'; // Stats JSON data
       } else if (path == "/stats") {  
         requestType = 'S'; // Stats page
       } else if (path == "/fader_settings") {
         requestType = 'G'; // Fader settings page
+      } else if (path == "/led_settings") {
+        requestType = 'L'; // LED settings page
       } else if (path == "/osc_settings") {
         requestType = 'A'; // OSC settings page
       } else if (path.startsWith("/downloadshortcuts")) {
         requestType = 'W'; // XML download
+      } else if (path == "/favicon.svg") {
+        requestType = 'I'; // Favicon
       } else if (path == "/") {
         requestType = 'H'; // Home/Root page
       }
@@ -260,6 +292,10 @@ void handleWebServer() {
           handleFaderSettings(request);
           break;
 
+        case 'V': // LED settings save
+          handleLEDSettingsSave(request);
+          break;
+
         case 'T': // Touch settings
           handleTouchSettings(request);
           break;
@@ -272,6 +308,10 @@ void handleWebServer() {
           handleNetworkReset();
           break;
           
+        case 'Y': // Stats JSON data
+          handleStatsData();
+          break;
+
         case 'S': // Stats page
           handleStatsPage();
           break;
@@ -280,12 +320,23 @@ void handleWebServer() {
           handleFaderSettingsPage();
           break;
           
+        case 'L': // LED settings page
+          handleLEDSettingsPage();
+          break;
+          
         case 'A': // OSC settings page
           handleOSCSettingsPage();
           break;
 
         case 'W': // XML download
           handleGMA3ShortcutsDownload();
+          break;
+
+        case 'B': // Reboot
+          handleRebootRequest();
+          break;
+        case 'I': // Favicon
+          handleFavicon();
           break;
           
         default: // 404 or unrecognized request
@@ -300,8 +351,14 @@ void handleWebServer() {
     
     delay(10); // Give the web browser time to receive the data
     client.stop();
-    debugPrint("Client disconnected");
+  debugPrint("Client disconnected");
   }
+}
+
+void handleRebootRequest() {
+  sendMessagePage("Rebooting", "Device is rebooting. You will be reconnected shortly.", "/", 15);
+  delay(1500);
+  resetTeensy();
 }
 
 //================================
@@ -315,6 +372,7 @@ void send404Response() {
   client.println();
   client.println("<html><head>");
   client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
+  client.println(F("<link rel='icon' type='image/svg+xml' href='data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%20width%3D%2232%22%20height%3D%2232%22%3E%3Cg%20stroke%3D%22%23000%22%20stroke-width%3D%22.7%22%20fill%3D%22%23ff7a00%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226%22%20r%3D%222%22/%3E%3Crect%20x%3D%226.5%22%20y%3D%229%22%20width%3D%223%22%20height%3D%223%22%20rx%3D%22.8%22%20ry%3D%22.8%22%20fill%3D%22%23222%22/%3E%3Crect%20x%3D%226.5%22%20y%3D%2212%22%20width%3D%223%22%20height%3D%2214%22%20rx%3D%221%22%20ry%3D%221%22%20fill%3D%22none%22/%3E%3Crect%20x%3D%226.5%22%20y%3D%2219%22%20width%3D%223%22%20height%3D%224%22%20rx%3D%221%22%20ry%3D%221%22/%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%226%22%20r%3D%222%22/%3E%3Crect%20x%3D%2214.5%22%20y%3D%229%22%20width%3D%223%22%20height%3D%223%22%20rx%3D%22.8%22%20ry%3D%22.8%22%20fill%3D%22%23222%22/%3E%3Crect%20x%3D%2214.5%22%20y%3D%2212%22%20width%3D%223%22%20height%3D%2214%22%20rx%3D%221%22%20ry%3D%221%22%20fill%3D%22none%22/%3E%3Crect%20x%3D%2214.5%22%20y%3D%2217%22%20width%3D%223%22%20height%3D%224%22%20rx%3D%221%22%20ry%3D%221%22/%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%226%22%20r%3D%222%22/%3E%3Crect%20x%3D%2222.5%22%20y%3D%229%22%20width%3D%223%22%20height%3D%223%22%20rx%3D%22.8%22%20ry%3D%22.8%22%20fill%3D%22%23222%22/%3E%3Crect%20x%3D%2222.5%22%20y%3D%2212%22%20width%3D%223%22%20height%3D%2214%22%20rx%3D%221%22%20ry%3D%221%22%20fill%3D%22none%22/%3E%3Crect%20x%3D%2222.5%22%20y%3D%2221%22%20width%3D%223%22%20height%3D%224%22%20rx%3D%221%22%20ry%3D%221%22/%3E%3C/g%3E%3C/svg%3E'>"));
   client.println("<style>");
   client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
   client.println(".error-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; text-align: center; border: 1px solid #3a3e41; }");
@@ -343,15 +401,24 @@ void handleDebugToggle(String requestBody) {
     Fconfig.serialDebug = debugMode;
   
     if (!debugMode) display.clearDebugLines();
-    if (!debugMode) displayIPAddress();
+  if (!debugMode) displayIPAddress();
 
-    saveFaderConfig();
+  saveFaderConfig();
 
-  
-
-  sendRedirect();
+  sendMessagePage("Debug Setting Saved", "Debug output setting has been updated.", "/", 3);
 }
 
+void handleFavicon() {
+  const char* svgData = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><g stroke=\"#000\" stroke-width=\".7\" fill=\"#ff7a00\"><circle cx=\"8\" cy=\"6\" r=\"2\"/><rect x=\"6.5\" y=\"9\" width=\"3\" height=\"3\" rx=\".8\" ry=\".8\" fill=\"#222\"/><rect x=\"6.5\" y=\"12\" width=\"3\" height=\"14\" rx=\"1\" ry=\"1\" fill=\"none\"/><rect x=\"6.5\" y=\"19\" width=\"3\" height=\"4\" rx=\"1\" ry=\"1\"/><circle cx=\"16\" cy=\"6\" r=\"2\"/><rect x=\"14.5\" y=\"9\" width=\"3\" height=\"3\" rx=\".8\" ry=\".8\" fill=\"#222\"/><rect x=\"14.5\" y=\"12\" width=\"3\" height=\"14\" rx=\"1\" ry=\"1\" fill=\"none\"/><rect x=\"14.5\" y=\"17\" width=\"3\" height=\"4\" rx=\"1\" ry=\"1\"/><circle cx=\"24\" cy=\"6\" r=\"2\"/><rect x=\"22.5\" y=\"9\" width=\"3\" height=\"3\" rx=\".8\" ry=\".8\" fill=\"#222\"/><rect x=\"22.5\" y=\"12\" width=\"3\" height=\"14\" rx=\"1\" ry=\"1\" fill=\"none\"/><rect x=\"22.5\" y=\"21\" width=\"3\" height=\"4\" rx=\"1\" ry=\"1\"/></g></svg>";
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: image/svg+xml");
+  client.print("Content-Length: ");
+  client.println(strlen(svgData));
+  client.println("Cache-Control: public, max-age=86400");
+  client.println("Connection: close");
+  client.println();
+  client.print(svgData);
+}
 
 void handleNetworkSettings(String request) {
   debugPrint("Handling network settings...");
@@ -399,139 +466,67 @@ void handleNetworkSettings(String request) {
   netConfig.useDHCP = newDHCP;
   debugPrintf("DHCP setting: %s\n", netConfig.useDHCP ? "ENABLED" : "DISABLED");
   
-  
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
-  client.println();
-  client.println("<html><head>");
-  client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
-  client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
-  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
-  client.println("h1 { color: #66bb6a; margin-top: 0; }");
-  client.println("p { color: #a8a095; line-height: 1.6; }");
-  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
-  client.println("a:hover { text-decoration: underline; }");
-  client.println("</style></head><body>");
-  client.println("<div class='success-container'>");
-  client.println("<h1>Network Settings Saved</h1>");
-  client.println("<p>Network settings have been saved successfully. For changes to take full effect, you may have to restart the device.</p>");
-  client.println("<p><a href='/'>Return to settings</a></p>");
-  client.println("</div></body></html>");
-
-  delay(2000);
-
-    // Save to EEPROM
+  // Save to EEPROM
   saveNetworkConfig();
+  sendMessagePage("Network Settings Saved", "Network settings have been saved. For changes to take full effect, you have to restart the device.", "/");
 
 }
 
 
 
 void handleOSCSettingsPage() {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: text/html"));
+  client.println(F("Connection: close"));
   client.println();
   
-  client.println("<!DOCTYPE html><html><head><title>OSC Settings</title>");
-  client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
+  client.println(F("<!DOCTYPE html><html><head><title>OSC Settings</title>"));
+  client.println(F("<meta name='viewport' content='width=device-width, initial-scale=1'>"));
   sendCommonStyles();
-  client.println("</head><body>");
+  client.println(F("</head><body>"));
   
   sendNavigationHeader("OSC Settings");
   
-  client.println("<div class='container'>");
+  client.println(F("<div class='container'>"));
   
-  waitForWriteSpace();
+  waitForWriteSpace(400);
   
-  client.println("<div class='card'>");
-  client.println("<h2>OSC Settings</h2>");
-  
-  client.println("<form method='get' action='/save'>");
-  
-  client.println("<label>OSC Send IP</label>");
-  client.print("<input type='text' name='osc_sendip' value='");
+  // OSC settings card
+  client.print(F("<div class='card'><h2>OSC Settings</h2><form method='get' action='/save'>"
+                 "<label>OSC Send IP</label><input type='text' name='osc_sendip' value='"));
   client.print(ipToString(netConfig.sendToIP));
-  client.println("'>");
-  client.println("<p class='help'>IP address of GMA3 console</p>");
-  
-  client.println("<label>OSC Send Port</label>");
-  client.print("<input type='number' name='osc_sendport' value='");
+  client.print(F("'><p class='help'>IP address of GMA3 console</p>"
+                 "<label>OSC Send Port</label><input type='number' name='osc_sendport' value='"));
   client.print(netConfig.sendPort);
-  client.println("'>");
-  
-  client.println("<label>OSC Receive Port</label>");
-  client.print("<input type='number' name='osc_receiveport' value='");
+  client.print(F("'>"
+                 "<label>OSC Receive Port</label><input type='number' name='osc_receiveport' value='"));
   client.print(netConfig.receivePort);
-  client.println("'>");
-  
-  client.println("<button type='submit'>Save OSC Settings</button>");
-  client.println("</form>");
-  
-  client.println("</div>");
-  
-  waitForWriteSpace();
-  
-  // EXEC KEYS CARD
-  client.println("<div class='card'>");
-  client.println("<h2>Exec Keys</h2>");
-  
-  client.println("<form method='get' action='/save'>");
-  
-  // Hidden field to identify this as an OSC settings request
-  client.println("<input type='hidden' name='osc_settings' value='1'>");
-  
-  client.println("<label>");
-  client.print("<input type='checkbox' name='sendKeystrokes' value='on'");
-  if (Fconfig.sendKeystrokes) client.print(" checked");
-  client.println("> Send USB Keystrokes instead of OSC for Exec keys");
-  client.println("</label>");
-  client.println("<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts XML file</p>");
-  
-  client.println("<button type='submit'>Save Exec Key Settings</button>");
-  client.println("</form>");
-  client.println("</div>");
+  client.print(F("'>"
+                 "<hr style='border:0;border-top:1px solid #2d3133;margin:14px 0;'>"
+                 "<label>"));
+  client.print(F("<input type='checkbox' name='sendKeystrokes' value='on'"));
+  if (Fconfig.sendKeystrokes) client.print(F(" checked"));
+  client.println(F("> Send USB Keystrokes instead of OSC for Exec keys</label>"
+                   "<p class='help'>*must have usb plugged in, allows a more native experience with the ability to store directly using the physical keys, must use keyboard shortcuts XML file</p>"
+                   "<button type='submit'>Save OSC Settings</button></form></div>"));
 
-  client.println("<div class='card'>");
-  client.println("<h2>Downloads</h2>");
-  
-  client.println("<p><strong>GMA3 Keyboard Shortcuts XML</strong></p>");
-  client.println("<p class='help'>Import this XML file into GMA3 to set up keyboard shortcuts. Use this when 'Send USB Keystrokes' is enabled above.</p>");
-  client.println("<form method='get' action='/downloadshortcuts'>");
-  client.println("<button type='submit'>Download GMA3 Shortcuts XML</button>");
-  client.println("</form>");
+  waitForWriteSpace(400);
 
+  // Downloads card (within same container for consistent width)
+  waitForWriteSpace(400);
+  client.println(F("<div class='card'><h2>Downloads</h2>"
+                   "<p><strong>GMA3 Keyboard Shortcuts XML</strong></p>"
+                   "<p class='help'>Import this XML file into GMA3 to set up keyboard shortcuts. Use this when 'Send USB Keystrokes' is enabled above.</p>"
+                   "<form method='get' action='/downloadshortcuts'>"
+                   "<button type='submit'>Download GMA3 Shortcuts XML</button>"
+                   "</form></div>"));
 
-  client.println("</div>");
-  
-  waitForWriteSpace();
-  
-  // CURRENT STATUS SECTION
-  client.println("<div class='card'>");
-  client.println("<h2>Current Status</h2>");
-  
-  client.print("<p>Send to: ");
-  client.print(ipToString(netConfig.sendToIP));
-  client.print(":");
-  client.print(netConfig.sendPort);
-  client.println("</p>");
-  
-  client.print("<p>Receive on: ");
-  client.print(ipToString(Ethernet.localIP()));
-  client.print(":");
-  client.print(netConfig.receivePort);
-  client.println("</p>");
-  
-  client.print("<p>Exec Key Mode: ");
-  client.print(Fconfig.sendKeystrokes ? "USB Keystrokes" : "OSC");
-  client.println("</p>");
-  
-  client.println("</div>");
-  
-  client.println("</div>");
-  client.println("</body></html>");
+  // Close main container
+  client.println(F("</div>"));
+
+  waitForWriteSpace(600);
+  sendFooter();
+  client.println(F("</body></html>"));
 }
 
 void handleCalibrationSettings(String request) {
@@ -549,11 +544,7 @@ void handleCalibrationSettings(String request) {
     // Save to EEPROM
     saveFaderConfig();
     
-    // Redirect back to fader settings page
-    client.println("HTTP/1.1 303 See Other");
-    client.println("Location: /fader_settings");
-    client.println("Connection: close");
-    client.println();
+    sendMessagePage("Calibration Saved", "Calibration speed has been saved successfully.", "/fader_settings", 3);
   } else {
     sendErrorResponse("Missing calibration PWM parameter");
     return;
@@ -565,12 +556,11 @@ void handleFaderSettings(String request) {
   
   // Extract parameter strings
   String minPwmStr = getParam(request, "minPwm");
-  String defaultPwmStr = getParam(request, "defaultPwm");
+  String maxPwmStr = getParam(request, "maxPwm");
   String targetToleranceStr = getParam(request, "targetTolerance");
   String sendToleranceStr = getParam(request, "sendTolerance");
-  String baseBrightnessStr = getParam(request, "baseBrightness");
-  String touchedBrightnessStr = getParam(request, "touchedBrightness");
-  String fadeTimeStr = getParam(request, "fadeTime");
+  String slowZoneStr = getParam(request, "slowZone");
+  String fastZoneStr = getParam(request, "fastZone");
   
   // Validate and update using constrainParam
   if (minPwmStr.length() > 0) {
@@ -578,9 +568,9 @@ void handleFaderSettings(String request) {
     Fconfig.minPwm = constrainParam(minPwm, 0, 255, Fconfig.minPwm);
   }
   
-  if (defaultPwmStr.length() > 0) {
-    int defaultPwm = defaultPwmStr.toInt();
-    Fconfig.defaultPwm = constrainParam(defaultPwm, 0, 255, Fconfig.defaultPwm);
+  if (maxPwmStr.length() > 0) {
+    int maxPwm = maxPwmStr.toInt();
+    Fconfig.maxPwm = constrainParam(maxPwm, 0, 255, Fconfig.maxPwm);
   }
   
   if (targetToleranceStr.length() > 0) {
@@ -588,50 +578,131 @@ void handleFaderSettings(String request) {
     Fconfig.targetTolerance = constrainParam(targetTolerance, 0, 100, Fconfig.targetTolerance);
   }
   
+  if (slowZoneStr.length() > 0) {
+    int slowZoneVal = slowZoneStr.toInt();
+    Fconfig.slowZone = constrainParam(slowZoneVal, 0, 100, Fconfig.slowZone);
+  }
+
+  if (fastZoneStr.length() > 0) {
+    int fastZoneVal = fastZoneStr.toInt();
+    Fconfig.fastZone = constrainParam(fastZoneVal, 0, 100, Fconfig.fastZone);
+  }
+
+  // Ensure ordering: fastZone must be greater than slowZone
+  if (Fconfig.fastZone <= Fconfig.slowZone) {
+    // Reset to defaults when user input is invalid (e.g., both 0 or both 100)
+    Fconfig.slowZone = SLOW_ZONE;
+    Fconfig.fastZone = FAST_ZONE;
+  }
+
   if (sendToleranceStr.length() > 0) {
     int sendTolerance = sendToleranceStr.toInt();
     Fconfig.sendTolerance = constrainParam(sendTolerance, 0, 100, Fconfig.sendTolerance);
   }
   
+  // Additional logical validation
+  if (Fconfig.minPwm > Fconfig.maxPwm) {
+    debugPrint("Warning: Min PWM is greater than Default PWM, swapping values");
+    int temp = Fconfig.minPwm;
+    Fconfig.minPwm = Fconfig.maxPwm;
+    Fconfig.maxPwm = temp;
+  }
+
+  // Save to EEPROM
+  saveFaderConfig();
+  
+  sendMessagePage("Fader Settings Saved", "Fader settings have been saved successfully.", "/fader_settings", 3);
+}
+
+void handleLEDSettingsSave(String request) {
+  debugPrint("Handling LED settings...");
+
+  String baseBrightnessStr = getParam(request, "bb");
+  String touchedBrightnessStr = getParam(request, "tb");
+  String fadeTimeStr = getParam(request, "ft");
+  bool newUseLevelPixels = (request.indexOf("lp=on") >= 0 || request.indexOf("lp=1") >= 0);
+  String execBaseBrightnessStr = getParam(request, "eb");
+  String execActiveBrightnessStr = getParam(request, "ea");
+  bool newUseStaticColor = (request.indexOf("sc=on") >= 0 || request.indexOf("sc=1") >= 0);
+  String staticRedStr = getParam(request, "sr");
+  String staticGreenStr = getParam(request, "sg");
+  String staticBlueStr = getParam(request, "sb");
+  String staticColorHex = getParam(request, "sch");
+
+  int parsedStaticR = execConfig.staticRed;
+  int parsedStaticG = execConfig.staticGreen;
+  int parsedStaticB = execConfig.staticBlue;
+
+  // If a color picker value is present, use it as the starting point
+  uint8_t pickerR, pickerG, pickerB;
+  if (parseHexColor(staticColorHex, pickerR, pickerG, pickerB)) {
+    parsedStaticR = pickerR;
+    parsedStaticG = pickerG;
+    parsedStaticB = pickerB;
+  }
+
   if (baseBrightnessStr.length() > 0) {
     int baseBrightness = baseBrightnessStr.toInt();
     Fconfig.baseBrightness = constrainParam(baseBrightness, 0, 255, Fconfig.baseBrightness);
     updateBaseBrightnessPixels();
     debugPrintf("Base Brightness saved: %d\n", Fconfig.baseBrightness);
   }
-  
+
   if (touchedBrightnessStr.length() > 0) {
     int touchedBrightness = touchedBrightnessStr.toInt();
     Fconfig.touchedBrightness = constrainParam(touchedBrightness, 0, 255, Fconfig.touchedBrightness);
     debugPrintf("Touched Brightness saved: %d\n", Fconfig.touchedBrightness);
   }
-  
+
   if (fadeTimeStr.length() > 0) {
     int fadeTime = fadeTimeStr.toInt();
     Fconfig.fadeTime = constrainParam(fadeTime, 0, 10000, Fconfig.fadeTime);
     debugPrintf("Fade Time saved: %d\n", Fconfig.fadeTime);
   }
 
-  // Additional logical validation
-  if (Fconfig.minPwm > Fconfig.defaultPwm) {
-    debugPrint("Warning: Min PWM is greater than Default PWM, swapping values");
-    int temp = Fconfig.minPwm;
-    Fconfig.minPwm = Fconfig.defaultPwm;
-    Fconfig.defaultPwm = temp;
+  Fconfig.useLevelPixels = newUseLevelPixels;
+  debugPrintf("Use Level Pixels: %s\n", Fconfig.useLevelPixels ? "true" : "false");
+
+  if (execBaseBrightnessStr.length() > 0) {
+    int execBase = execBaseBrightnessStr.toInt();
+    execConfig.baseBrightness = constrainParam(execBase, 0, 255, execConfig.baseBrightness);
+    debugPrintf("Exec Base Brightness saved: %d\n", execConfig.baseBrightness);
   }
 
-  // Save to EEPROM
+  if (execActiveBrightnessStr.length() > 0) {
+    int execActive = execActiveBrightnessStr.toInt();
+    execConfig.activeBrightness = constrainParam(execActive, 0, 255, execConfig.activeBrightness);
+    debugPrintf("Exec Active Brightness saved: %d\n", execConfig.activeBrightness);
+  }
+
+  if (staticRedStr.length() > 0) {
+    parsedStaticR = constrainParam(staticRedStr.toInt(), 0, 255, parsedStaticR);
+  }
+  if (staticGreenStr.length() > 0) {
+    parsedStaticG = constrainParam(staticGreenStr.toInt(), 0, 255, parsedStaticG);
+  }
+  if (staticBlueStr.length() > 0) {
+    parsedStaticB = constrainParam(staticBlueStr.toInt(), 0, 255, parsedStaticB);
+  }
+
+  execConfig.useStaticColor = newUseStaticColor;
+  execConfig.staticRed = parsedStaticR;
+  execConfig.staticGreen = parsedStaticG;
+  execConfig.staticBlue = parsedStaticB;
+
+  debugPrintf("Exec Static Color Enabled: %s\n", execConfig.useStaticColor ? "true" : "false");
+  debugPrintf("Exec Static Color: R%d G%d B%d\n", execConfig.staticRed, execConfig.staticGreen, execConfig.staticBlue);
+
   saveFaderConfig();
-  
-  // Redirect back to fader settings page
-  client.println("HTTP/1.1 303 See Other");
-  client.println("Location: /fader_settings");
-  client.println("Connection: close");
-  client.println();
+  saveExecConfig();
+  markKeyLedsDirty();
+  sendMessagePage("LED Settings Saved", "LED settings have been saved successfully.", "/led_settings", 3);
 }
 
 void handleRunCalibration() {
   debugPrint("Running fader calibration...");
+
+  sendMessagePage("Fader calibration started", "Redirecting to statistics page...", "/stats", 2);
   
   // Run the calibration process
   calibrateFaders();
@@ -640,12 +711,9 @@ void handleRunCalibration() {
   // Reinitialize MPR121 after calibration due to I2C hang risk
   debugPrint("Reinitializing touch sensor after calibration...");
   setupTouch();  // Restore I2C communication and config
+
+  // Inform user and redirect to statistics page
   
-  // Redirect back to fader settings page
-  client.println("HTTP/1.1 303 See Other");
-  client.println("Location: /fader_settings");
-  client.println("Connection: close");
-  client.println();
 }
 
 void handleTouchSettings(String request) {
@@ -658,7 +726,7 @@ void handleTouchSettings(String request) {
   // Validate and update using constrainParam
   if (autoCalModeStr.length() > 0) {
     int autoCalMode = autoCalModeStr.toInt();
-    autoCalibrationMode = constrainParam(autoCalMode, 0, 2, autoCalibrationMode);
+    autoCalibrationMode = constrainParam(autoCalMode, 0, 1, autoCalibrationMode);
   }
   
   if (touchThresholdStr.length() > 0) {
@@ -693,17 +761,13 @@ void handleTouchSettings(String request) {
   // Reset MPR121
   setupTouch();
   
-  // Redirect back to fader settings page
-  client.println("HTTP/1.1 303 See Other");
-  client.println("Location: /fader_settings");
-  client.println("Connection: close");
-  client.println();
+  sendMessagePage("Touch Settings Saved", "Touch settings have been saved successfully.", "/fader_settings", 3);
 }
 
 void handleResetDefaults() {
   debugPrint("Resetting all settings to defaults...");
   resetToDefaults();
-  sendRedirect();
+  sendMessagePage("Factory Defaults Restored", "All settings have been reset to factory defaults.", "/", 3);
 }
 
 void handleOSCSettings(String request) {
@@ -760,60 +824,21 @@ void handleOSCSettings(String request) {
   // NEW: Update sendKeystrokes setting
   Fconfig.sendKeystrokes = newSendKeystrokes;
   debugPrintf("Updated sendKeystrokes: %s\n", Fconfig.sendKeystrokes ? "true" : "false");
-  
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
-  client.println();
-  client.println("<html><head>");
-  client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
-  client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #202325; color: #e8e6e3; }");
-  client.println(".success-container { background: #181a1b; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); max-width: 500px; margin: 50px auto; border: 1px solid #3a3e41; }");
-  client.println("h1 { color: #66bb6a; margin-top: 0; }");
-  client.println("p { color: #a8a095; line-height: 1.6; }");
-  client.println("a { color: #3391ff; text-decoration: none; font-weight: 500; }");
-  client.println("a:hover { text-decoration: underline; }");
-  client.println("</style></head><body>");
-  client.println("<div class='success-container'>");
-  client.println("<h1>OSC Settings Saved</h1>");
-  client.println("<p>OSC settings have been saved successfully. For changes to take full effect, you may have to restart the device.</p>");
-  client.println("<p><a href='/'>Return to settings</a></p>");
-  client.println("</div></body></html>");
 
   // Save both network config (for OSC settings) and fader config (for sendKeystrokes)
   saveNetworkConfig();
   saveFaderConfig();  // NEW: Save fader config for sendKeystrokes setting
-    
-//  restartUDP(); we do this inside of savenetworkconfig now
 
   debugPrint("OSC settings saved successfully");
+  sendMessagePage("OSC Settings Saved", "OSC settings have been saved successfully. For changes to take full effect, you may have to restart the device.", "/osc_settings", 3);
 }
 
 
 void handleNetworkReset() {  
-  // Special response for network settings with improved styling
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
-  client.println();
-  client.println("<html><head>");
-  client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
-  client.println("<style>");
-  client.println("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }");
-  client.println(".success-container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: 50px auto; }");
-  client.println("h1 { color: #f57c00; margin-top: 0; }");
-  client.println("p { color: #666; line-height: 1.6; }");
-  client.println("a { color: #1976d2; text-decoration: none; font-weight: 500; }");
-  client.println("a:hover { text-decoration: underline; }");
-  client.println("</style></head><body>");
-  client.println("<div class='success-container'>");
-  client.println("<h1>Network Settings Reset</h1>");
-  client.println("<p>Network settings have been reset to defaults. For changes to take full effect, please restart the device.</p>");
-  client.println("<p><a href='/'>Return to settings</a></p>");
-  client.println("</div></body></html>");
-  
   debugPrint("Resetting network settings to defaults...");
+  sendMessagePage("Network Settings Reset",
+                  "Network settings are resetting. For changes to take full effect reboot device.",
+                  "/");
   resetNetworkDefaults();
 }
 
@@ -848,42 +873,161 @@ void sendCommonStylesLight() {
 
 // Helper function to send CSS styles
 void sendCommonStyles() {
+  client.println(F("<link rel='icon' type='image/svg+xml' href='/favicon.svg'>"));
+  waitForWriteSpace(800);
   client.println("<style>");
-  client.println("body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #202325; color: #e8e6e3; }");
-  client.println(".header { background: #145ea8; color: #e8e6e3; padding: 20px; text-align: center; }");
-  client.println(".header h1 { margin: 0; font-size: 24px; }");
-  client.println(".header p { margin: 5px 0; font-size: 14px; }");
-  client.println(".nav { background: #262a2b; padding: 10px; text-align: center; }");
-  client.println(".nav a { color: #e8e6e3; text-decoration: none; padding: 5px 15px; margin: 0 5px; }");
-  client.println(".nav a:hover { background: #404548; }");
-  client.println(".container { max-width: 600px; margin: 20px auto; padding: 0 20px; }");
-  client.println(".card { background: #181a1b; padding: 20px; margin-bottom: 20px; border: 1px solid #3a3e41; color: #e8e6e3; }");
-  client.println(".card h2 { margin: top: 0; font-size: 20px; border-bottom: 1px solid #3a3e41; padding-bottom: 10px; }");
-  client.println("input[type='text'], input[type='number'], select { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; background: #262a2b; color: #e8e6e3; border: 1px solid #3a3e41; }");
-  client.println("label { display: block; margin-top: 10px; font-weight: bold; color: #e8e6e3; }");
-  client.println(".help { font-size: 12px; color: #a8a095; margin-top: 2px; }");
-  client.println("button { background: #145ea8; color: #e8e6e3; padding: 10px 20px; border: none; cursor: pointer; width: 100%; margin-top: 10px; }");
-  client.println("button:hover { background: #11519a; }");
-  client.println(".divider { border-top: 1px solid #3a3e41; margin: 20px 0; }");
+  client.println("body { margin: 0; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background: #181a1b; color: #e8e6e3; }");
+  client.println(".container { max-width: 800px; margin: 20px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }");
+  client.println(".logo-section { text-align: center; padding: 16px 0 8px; }");
+  client.println(".logo-svg { width: 240px; height: auto; display: block; margin: 0 auto; }");
+  client.println(".ip-bar { text-align: center; color: #a8a095; font-size: 13px; margin-bottom: 8px; }");
+  client.println(".nav-links { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 0 auto 18px; padding: 0 12px; width: 100%; max-width: 800px; box-sizing: border-box; }");
+  client.println(".nav-links a { color: #e8e6e3; text-decoration: none; padding: 10px 14px; background: #222425; border-radius: 10px 10px 0 0; font-weight: 600; }");
+  client.println(".nav-links a:hover { background: #2f3234; }");
+  client.println(".nav-links a.active { background: #ff7a00; color: #0f0f0f; }");
+  client.println(".card { background: #202324; padding: 18px; margin-bottom: 16px; border: 1px solid #2d3133; border-radius: 10px; box-sizing: border-box; }");
+  client.println(".card h2 { margin: 0 0 12px; font-size: 20px; border-bottom: 1px solid #2d3133; padding-bottom: 8px; }");
+  client.println(".card-body { display: flex; flex-direction: column; gap: 10px; }");
+  client.println(".form-group { margin-bottom: 6px; }");
+  client.println("label { display: block; margin: 10px 0 4px; font-weight: 600; color: #e8e6e3; }");
+  client.println("input[type='text'], input[type='number'], select { width:100%; padding: 10px; margin: 6px 0; box-sizing: border-box; background: #1b1d1e; color: #e8e6e3; border: 1px solid #3a3e41; border-radius: 6px; }");
+  client.println(".help, .help-text { font-size: 12px; color: #a8a095; margin-top: 4px; }");
+  client.println("button, .btn { display: block; width:200px; background: #ff7a00; color: #0f0f0f; padding: 11px; border: none; cursor: pointer; border-radius: 6px; font-weight: 700; margin: 12px auto 0; text-align: center; }");
+  client.println("button:hover, .btn:hover { background: #e56a00; }");
+  client.println(".divider { border-top: 1px solid #3a3e41; margin: 18px 0; }");
+  client.println(".color-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }");
+  client.println(".color-row input[type='color'] { flex: 1 0 140px; min-height: 44px; padding: 0; border: 1px solid #3a3e41; border-radius: 6px; background: #1b1d1e; }");
+  client.println(".color-row .channel-input { flex: 1 0 70px; width: auto; }");
   client.println("</style>");
 }
 
 
 // Helper function to send navigation header
 void sendNavigationHeader(const char* pageTitle) {
-  client.println("<div class='header'>");
-  client.println("<h1>EvoFaderWing Configuration</h1>");
-  client.print("<p>IP: ");
-  client.print(ipToString(Ethernet.localIP()));
+
+String topHeader;
+  topHeader += "OSC Send: ";
+  topHeader += ipToString(netConfig.sendToIP);
+  topHeader += ":";
+  topHeader += netConfig.sendPort;
+  topHeader += " | OSC Receive: ";
+  topHeader += ipToString(Ethernet.localIP());
+  topHeader += ":";
+  topHeader += netConfig.receivePort;
+  topHeader += " | Key Send Mode: ";
+  topHeader += Fconfig.sendKeystrokes ? "USB" : "OSC";
+
+
+  client.println("<div class='logo-section'>");
+  client.println("<svg class='logo-svg' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 320'><text x='215' y='200' text-anchor='end' font-family='DejaVu Sans, Arial, Helvetica, sans-serif' font-weight='700' font-size='110' fill='#ff7a00'>Evo</text><text x='430' y='280' text-anchor='end' font-family='DejaVu Sans, Arial, Helvetica, sans-serif' font-weight='700' font-size='80' fill='#ff7a00'>FaderWing</text><g class='fader-bank' stroke='#000'><circle cx='242' cy='85' r='8' stroke-width='3' fill='#ff7a00'/><rect x='230' y='100' width='24' height='16' rx='4' ry='4' fill='#222' stroke-width='2'/><rect x='230' y='125' width='24' height='80' rx='6' ry='6' fill='none' stroke-width='3'/><rect x='230' y='160' width='24' height='30' rx='6' ry='6' fill='#ff7a00' stroke-width='2'/><circle cx='282' cy='85' r='8' stroke-width='3' fill='#ff7a00'/><rect x='270' y='100' width='24' height='16' rx='4' ry='4' fill='#222' stroke-width='2'/><rect x='270' y='125' width='24' height='80' rx='6' ry='6' fill='none' stroke-width='3'/><rect x='270' y='154' width='24' height='30' rx='6' ry='6' fill='#ff7a00' stroke-width='2'/><circle cx='322' cy='85' r='8' stroke-width='3' fill='#ff7a00'/><rect x='310' y='100' width='24' height='16' rx='4' ry='4' fill='#222' stroke-width='2'/><rect x='310' y='125' width='24' height='80' rx='6' ry='6' fill='none' stroke-width='3'/><rect x='310' y='145' width='24' height='30' rx='6' ry='6' fill='#ff7a00' stroke-width='2'/><circle cx='362' cy='85' r='8' stroke-width='3' fill='#ff7a00'/><rect x='350' y='100' width='24' height='16' rx='4' ry='4' fill='#222' stroke-width='2'/><rect x='350' y='125' width='24' height='80' rx='6' ry='6' fill='none' stroke-width='3'/><rect x='350' y='168' width='24' height='30' rx='6' ry='6' fill='#ff7a00' stroke-width='2'/><circle cx='402' cy='85' r='8' stroke-width='3' fill='#ff7a00'/><rect x='390' y='100' width='24' height='16' rx='4' ry='4' fill='#222' stroke-width='2'/><rect x='390' y='125' width='24' height='80' rx='6' ry='6' fill='none' stroke-width='3'/><rect x='390' y='150' width='24' height='30' rx='6' ry='6' fill='#ff7a00' stroke-width='2'/></g></svg>");
+
+
+  bool isNetwork = strcmp(pageTitle, "Network Settings") == 0 || strcmp(pageTitle, "Network/Debug") == 0;
+  bool isOsc = strcmp(pageTitle, "OSC Settings") == 0 || strcmp(pageTitle, "OSC") == 0;
+  bool isFader = strcmp(pageTitle, "Fader Configuration") == 0 || strcmp(pageTitle, "Faders") == 0;
+  bool isLED = strcmp(pageTitle, "LED Settings") == 0 || strcmp(pageTitle, "LEDs") == 0;
+  bool isStats = strcmp(pageTitle, "Statistics") == 0;
+
+  client.println("<div class='nav-links'>");
+
+  client.print("<a href='/'");
+  if (isNetwork) client.print(" class='active'");
+  client.println(">Network/Debug</a>");
+
+  client.print("<a href='/osc_settings'");
+  if (isOsc) client.print(" class='active'");
+  client.println(">OSC</a>");
+
+  client.print("<a href='/fader_settings'");
+  if (isFader) client.print(" class='active'");
+  client.println(">Faders</a>");
+
+  client.print("<a href='/led_settings'");
+  if (isLED) client.print(" class='active'");
+  client.println(">LEDs</a>");
+
+  client.print("<a href='/stats'");
+  if (isStats) client.print(" class='active'");
+  client.println(">Statistics</a>");
+  client.println("</div>");
+
+  // Ip bar
+  client.println("</div><div class='ip-bar'>");
+  client.print(topHeader);
+  client.println("</div>");
+
+
+}
+
+void sendFooter() {
+  client.println(F("<div class='ip-bar'>V" SW_VERSION " - by Shawn R</div>"));
+}
+
+void sendMessagePage(const char* title, const char* message, const char* redirectUrl, int redirectSeconds) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println("Connection: close");
+  client.println();
+  client.println("<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>");
+  client.println("<link rel='icon' type='image/svg+xml' href='/favicon.svg'>");
+  if (redirectUrl && redirectUrl[0] != '\0' && redirectSeconds > 0) {
+    client.print("<script>setTimeout(function(){ window.location.replace('");
+    client.print(redirectUrl);
+    client.print("'); }, ");
+    client.print(redirectSeconds * 1000);
+    client.println(");</script>");
+  }
+  client.println("<style>");
+  client.println("body { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background: #181a1b; color: #e8e6e3; margin: 0; padding: 20px; }");
+  client.println(".msg-container { max-width: 520px; margin: 60px auto; background: #202324; border: 1px solid #2d3133; border-radius: 10px; padding: 24px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); text-align: center; }");
+  client.println(".msg-container h1 { margin: 0 0 12px; font-size: 24px; color: #ff7a00; }");
+  client.println(".msg-container p { margin: 8px 0; color: #a8a095; line-height: 1.5; }");
+  client.println(".msg-container a { color: #ff7a00; text-decoration: none; font-weight: 700; }");
+  client.println(".msg-container a:hover { text-decoration: underline; }");
+  client.println("</style></head><body>");
+  client.println("<div class='msg-container'>");
+  client.print("<h1>");
+  client.print(title);
+  client.println("</h1>");
+  client.print("<p>");
+  client.print(message);
   client.println("</p>");
-  client.println("</div>");
-  
-  client.println("<div class='nav'>");
-  client.println("<a href='/'>Network/Debug</a>");
-  client.println("<a href='/osc_settings'>OSC</a>");
-  client.println("<a href='/fader_settings'>Faders</a>");
-  client.println("<a href='/stats'>Statistics</a>");
-  client.println("</div>");
+  if (redirectUrl && redirectUrl[0] != '\0') {
+    client.print("<p><a href='");
+    client.print(redirectUrl);
+    client.println("'>Continue</a></p>");
+  }
+  client.println("</div></body></html>");
+}
+
+void handleStatsData() {
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: application/json"));
+  client.println(F("Cache-Control: no-cache, no-store, must-revalidate"));
+  client.println(F("Connection: close"));
+  client.println();
+
+  client.print(F("{\"faders\":["));
+  for (int i = 0; i < NUM_FADERS; i++) {
+    Fader& f = faders[i];
+    int currentVal = analogRead(f.analogPin);
+
+    if (i > 0) client.print(',');
+    client.print(F("{\"id\":"));
+    client.print(i + 1);
+    client.print(F(",\"current\":"));
+    client.print(currentVal);
+    client.print(F(",\"min\":"));
+    client.print(f.minVal);
+    client.print(F(",\"max\":"));
+    client.print(f.maxVal);
+    client.print(F(",\"osc\":"));
+    client.print(readFadertoOSC(faders[i]));
+    client.print('}');
+
+    if (i % 3 == 0) waitForWriteSpace(200);
+  }
+  client.println(F("]}"));
 }
 
 
@@ -898,8 +1042,8 @@ void handleStatsPage() {
   sendCommonStyles();
   client.println("<style>");
   client.println("table { width: 100%; border-collapse: collapse; }");
-  client.println("th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
-  client.println("th { background: #145ea8; }");
+  client.println("th, td { border: 1px solid #3a3e41; padding: 8px; text-align: left; }");
+  client.println("th { background: #ff7a00; color: #0f0f0f; }");
   client.println("</style>");
   client.println("</head><body>");
   
@@ -907,210 +1051,203 @@ void handleStatsPage() {
   
   client.println("<div class='container'>");
   client.println("<div class='card'>");
-  client.println("<h2>Fader Statistics</h2>");
+  client.println("<h2>Live Fader Stats</h2>");
   
-  client.println("<table>");
+  client.println("<table id='stats-table'>");
   client.println("<tr><th>Fader</th><th>Current</th><th>Min</th><th>Max</th><th>OSC Value</th></tr>");
-  
-  for (int i = 0; i < NUM_FADERS; i++) {
-    Fader& f = faders[i];
-    int currentVal = analogRead(f.analogPin);
-    
-    client.print("<tr><td>Fader ");
-    client.print(i + 1);
-    client.print("</td><td>");
-    client.print(currentVal);
-    client.print("</td><td>");
-    client.print(f.minVal);
-    client.print("</td><td>");
-    client.print(f.maxVal);
-    client.print("</td><td>");
-    client.print(readFadertoOSC(faders[i]));
-    client.println("</td></tr>");
-    
-    if (i % 3 == 0) waitForWriteSpace();
-  }
-  
-  client.println("</table>");
+  client.println("<tbody id='stats-body'><tr><td colspan='5'>Loading...</td></tr></tbody></table>");
+
   client.println("</div>");
   client.println("</div>");
+  waitForWriteSpace(600);
+  client.println(F("<script>"
+    "const statsBody=document.getElementById('stats-body');"
+    "function renderStats(data){if(!data||!data.faders)return;"
+    "let rows='';"
+    "for(let i=0;i<data.faders.length;i++){const f=data.faders[i];"
+    "rows+=`<tr><td>Fader ${f.id}</td><td>${f.current}</td><td>${f.min}</td><td>${f.max}</td><td>${f.osc}</td></tr>`;}"
+    "statsBody.innerHTML=rows;}"
+    "async function refreshStats(){try{const res=await fetch('/stats_data');if(!res.ok)return;const data=await res.json();renderStats(data);}catch(e){}}"
+    "refreshStats();"
+    "setInterval(refreshStats,500);"
+    "</script>"));
+  sendFooter();
   client.println("</body></html>");
 }
 
 void handleFaderSettingsPage() {
-  // Send HTTP headers
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println("Connection: close");
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: text/html"));
+  client.println(F("Connection: close"));
+  client.println();
+
+  client.println(F("<!DOCTYPE html><html><head><title>Fader Configuration</title>"));
+  client.println(F("<meta name='viewport' content='width=device-width, initial-scale=1'>"));
+  sendCommonStyles();
+  client.println(F("</head><body>"));
+
+  sendNavigationHeader("Fader Configuration");
+
+  client.println(F("<div class='container'>"));
+
+  waitForWriteSpace(600);
+
+  client.print(F(
+    "<div class='card'><div class='card-header'><h2>Fader Settings</h2></div><div class='card-body'><form method='get' action='/save'>"
+    "<div class='form-group'><label>Min Speed</label><input type='number' name='minPwm' value='"));
+  client.print(Fconfig.minPwm);
+  client.print(F(
+    "' min='0' max='255'><p class='help-text'>Too low stalls motor, too high passes setpoint and causes jitter) (0-255)</p></div>"
+    "<div class='form-group'><label>Max Speed</label><input type='number' name='maxPwm' value='"));
+  client.print(Fconfig.maxPwm);
+  client.print(F(
+    "' min='0' max='255'><p class='help-text'>Max motor speed (0-255)</p></div>"
+    "<div class='form-group'><label>Slow Speed Zone</label><input type='number' name='slowZone' value='"));
+  client.print(Fconfig.slowZone);
+  client.print(F(
+    "' min='0' max='100'><p class='help-text'>Fader runs at min speed when nearer than this distance to the setpoint.</p></div>"
+    "<div class='form-group'><label>Fast Speed Zone</label><input type='number' name='fastZone' value='"));
+  client.print(Fconfig.fastZone);
+  
+  waitForWriteSpace(600);
+
+  client.print(F(
+    "' min='1' max='100'><p class='help-text'>Fader runs at max speed when farther than this distance from the setpoint.</p></div>"
+    "<p class='help-text'>Between these distances, speed scales smoothly from min to max.</p>"
+    "<div class='divider'></div>"
+    "<div class='form-group'><label>Target Tolerance</label><input type='number' name='targetTolerance' value='"));
+  client.print(Fconfig.targetTolerance);
+  client.println(F(
+    "' min='0' max='100'><p class='help-text'>Position accuracy before motor stops</p></div>"));
+
+  waitForWriteSpace(600);
+
+  client.print(F("<div class='form-group'><label>Send Tolerance</label><input type='number' name='sendTolerance' value='"));
+  client.print(Fconfig.sendTolerance);
+  client.println(F(
+    "' min='0' max='100'><p class='help-text'>Min movement before OSC update <2 can cause jitter</p></div>"
+    "<button type='submit' class='btn btn-primary btn-block'>Save Fader Settings</button>"
+    "</form></div></div>"));
+
+  waitForWriteSpace(600);
+
+  client.print(F(
+    "<div class='card' style='margin-top: 20px;'><div class='card-header'><h2>Calibration & Touch</h2></div><div class='card-body'>"
+    "<form method='get' action='/save'><div class='form-group'><label>Motor Calibration Speed</label><input type='number' name='calib_pwm' value='"));
+  client.print(Fconfig.calibratePwm);
+  client.println(F(
+    "' min='0' max='255'><p class='help-text'>Motor speed during calibration (lower = gentler)</p></div><button type='submit' class='btn btn-success btn-block'>Save Calibration Speed</button></form>"
+    "<form method='post' action='/calibrate'><input type='hidden' name='calibrate' value='1'><button type='submit' class='btn btn-info btn-block'>Run Fader Calibration</button></form>"
+    "<div class='divider'></div>"
+    "<form method='get' action='/save'><h3 style='margin: 0 0 10px;'>Touch Sensor</h3>"));
+
+  client.print(F("<div class='form-group'><label>Auto Calibration</label><select name='autoCalMode'>"
+    "<option value='0'"));
+  if (autoCalibrationMode == 0) client.print(F(" selected"));
+  client.print(F(">Disabled (Autoconfig off)</option><option value='1'"));
+  if (autoCalibrationMode == 1) client.print(F(" selected"));
+  client.println(F(">Enabled (Adafruit autoconfig)</option></select><p class='help-text'>Toggles the built-in autoconfig for baselines. Disabled leaves power-up defaults (NOT RECOMENDED).</p></div>"));
+
+  client.print(F("<div class='form-group'><label>Touch Threshold</label><input type='number' name='touchThreshold' value='"));
+  client.print(touchThreshold);
+  client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive (default: 12)</p></div>"));
+
+  client.print(F("<div class='form-group'><label>Release Threshold</label><input type='number' name='releaseThreshold' value='"));
+  client.print(releaseThreshold);
+  client.println(F("' min='1' max='255'><p class='help-text'>Lower values = harder to release (default: 6)</p></div>"
+    "<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>"
+    "<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>"
+    "</form></div></div>"));
+
+  waitForWriteSpace(800);
+  client.println(F("</div>")); // container
+  sendFooter();
+  client.println(F("</body></html>"));
+}
+
+void handleLEDSettingsPage() {
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: text/html"));
+  client.println(F("Connection: close"));
   client.println();
   
-  // Send HTML head
-  client.println("<!DOCTYPE html><html><head><title>Fader Configuration</title>");
-  client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
-  
-  // Send common styles
+  client.println(F("<!DOCTYPE html><html><head><title>Fader LEDs</title>"));
+  client.println(F("<meta name='viewport' content='width=device-width, initial-scale=1'>"));
   sendCommonStyles();
-  client.println("</head><body>");
+  client.println(F("</head><body>"));
   
-  // Send navigation header
-  sendNavigationHeader("Fader Configuration");
+  sendNavigationHeader("LED Settings");
   
-  // Main container
-  client.println("<div class='container'>");
+  client.println(F("<div class='container'>"));
+  waitForWriteSpace(600);
   
-waitForWriteSpace();
-
-  // Fader Settings Card
-  client.println("<div class='card'>");
-  client.println("<div class='card-header'><h2>Fader Settings</h2></div>");
-  client.println("<div class='card-body'>");
-  client.println("<form method='get' action='/save'>");
-  
-  // Min PWM
-  client.println("<div class='form-group'>");
-  client.println("<label>Min PWM</label>");
-  client.print("<input type='number' name='minPwm' value='");
-  client.print(Fconfig.minPwm);
-  client.println("' min='0' max='255'>");
-  client.println("<p class='help-text'>Minimum motor speed (too low stalls motor, too high passes setpoint and causes jitter) (0-255)</p>");
-  client.println("</div>");
-  
-  // Default PWM
-  client.println("<div class='form-group'>");
-  client.println("<label>Default PWM Speed</label>");
-  client.print("<input type='number' name='defaultPwm' value='");
-  client.print(Fconfig.defaultPwm);
-  client.println("' min='0' max='255'>");
-  client.println("<p class='help-text'>Base motor speed (0-255)</p>");
-  client.println("</div>");
-  
-  // Target Tolerance
-  client.println("<div class='form-group'>");
-  client.println("<label>Target Tolerance</label>");
-  client.print("<input type='number' name='targetTolerance' value='");
-  client.print(Fconfig.targetTolerance);
-  client.println("' min='0' max='100'>");
-  client.println("<p class='help-text'>Position accuracy before motor stops</p>");
-  client.println("</div>");
-  
-waitForWriteSpace();
-
-  // Send Tolerance
-  client.println("<div class='form-group'>");
-  client.println("<label>Send Tolerance</label>");
-  client.print("<input type='number' name='sendTolerance' value='");
-  client.print(Fconfig.sendTolerance);
-  client.println("' min='0' max='100'>");
-  client.println("<p class='help-text'>Minimum movement before sending OSC update</p>");
-  client.println("</div>");
-  
-  // Brightness controls
-  client.println("<div class='divider'></div>");
-  client.println("<h3 style='margin-top: 0; margin-bottom: 16px; font-size: 16px;'>LED Brightness</h3>");
-  
-  client.println("<div class='form-group'>");
-  client.println("<label>Base Brightness</label>");
-  client.print("<input type='number' name='baseBrightness' value='");
+  client.print(F("<div class='card'><div class='card-header'><h2>Fader LEDs</h2></div><div class='card-body'><form method='get' action='/save'>"
+                 "<div class='form-group'><label>Base Level</label><input type='number' name='bb' value='"));
   client.print(Fconfig.baseBrightness);
-  client.println("' min='0' max='255'>");
-  client.println("<p class='help-text'>LED brightness when fader is not touched (0-255)</p>");
-  client.println("</div>");
-  
-  client.println("<div class='form-group'>");
-  client.println("<label>Touched Brightness</label>");
-  client.print("<input type='number' name='touchedBrightness' value='");
+  client.print(F("' min='0' max='255'><p class='help-text'>LED brightness when fader is not touched (0-255)</p></div>"
+                 "<div class='form-group'><label>Touched Level</label><input type='number' name='tb' value='"));
   client.print(Fconfig.touchedBrightness);
-  client.println("' min='0' max='255'>");
-  client.println("<p class='help-text'>LED brightness when fader is touched (0-255)</p>");
-  client.println("</div>");
-
-  client.println("<div class='form-group'>");
-  client.println("<label>Fade Time</label>");
-  client.print("<input type='number' name='fadeTime' value='");
+  client.print(F("' min='0' max='255'><p class='help-text'>LED brightness when fader is touched (0-255)</p></div>"
+                 "<div class='form-group'><label>Fade Time</label><input type='number' name='ft' value='"));
   client.print(Fconfig.fadeTime);
-  client.println("' min='0' max='10000'>");
-  client.println("<p class='help-text'>Time in ms that the leds will fade</p>");
-  client.println("</div>");
+  client.println(F("' min='0' max='10000'><p class='help-text'>Time in ms that the LEDs will fade</p></div>"
+                   "<div class='form-group'><label>LED Mode</label><label style='display: inline-block; margin-top: 6px;'>"
+                   "<input type='checkbox' name='lp' value='on'"));
+  if (Fconfig.useLevelPixels) client.print(F(" checked"));
   
-  client.println("<button type='submit' class='btn btn-primary btn-block'>Save Fader Settings</button>");
-  client.println("</form></div></div>");
-  
+  waitForWriteSpace(800);
 
-  waitForWriteSpace();
+  client.print(F("> Show level bars instead of full fill</label><p class='help-text'>When enabled the fader lights up to match the position.</p></div>"
+                 "<div class='divider'></div>"
+                 "<h3 style='margin: 6px 0;'>Exec LEDs</h3>"
+                 "<div class='form-group'><label>Off Level</label><input type='number' name='eb' value='"));
+  client.print((int)execConfig.baseBrightness);
+  client.print(F("' min='0' max='255'><p class='help-text'>Level when populated/off.</p></div>"
+                 "<div class='form-group'><label>On Level</label><input type='number' name='ea' value='"));
+  client.print((int)execConfig.activeBrightness);
+  client.print(F("' min='0' max='255'><p class='help-text'>Level when active/on.</p></div>"
+                 "<div class='form-group'><label><input type='checkbox' name='sc' value='on'"));
+  if (execConfig.useStaticColor) client.print(F(" checked"));
+  client.print(F("> Use Static Color</label><p class='help-text'>Static color overrides appearance.</p></div>"
+                 "<div class='form-group'><label>Static Color</label><div class='color-row'>"
+                 "<input type='color' id='staticColorPicker' name='sch' value='"));
 
+  waitForWriteSpace(600);
 
-  // Calibration Card
-  client.println("<div class='card' style='margin-top: 20px;'>");
-  client.println("<div class='card-header'><h2>Calibration</h2></div>");
-  client.println("<div class='card-body'>");
+  char staticHex[8];
+  snprintf(staticHex, sizeof(staticHex), "#%02X%02X%02X", execConfig.staticRed, execConfig.staticGreen, execConfig.staticBlue);
+  client.print(staticHex);
+  client.print(F("'><input type='number' class='channel-input' id='staticRed' name='sr' min='0' max='255' value='"));
+  client.print((int)execConfig.staticRed);
+  client.print(F("'><input type='number' class='channel-input' id='staticGreen' name='sg' min='0' max='255' value='"));
+  client.print((int)execConfig.staticGreen);
+  client.print(F("'><input type='number' class='channel-input' id='staticBlue' name='sb' min='0' max='255' value='"));
+  client.print((int)execConfig.staticBlue);
+  client.println(F("'></div><p class='help-text'>Static picker or RGB values (0-255).</p></div>"
+                   "<button type='submit' class='btn btn-primary btn-block'>Save LED Settings</button>"
+                   "</form></div></div>"));
   
-  client.println("<form method='get' action='/save'>");
-  client.println("<div class='form-group'>");
-  client.println("<label>Calibration PWM Speed</label>");
-  client.print("<input type='number' name='calib_pwm' value='");
-  client.print(Fconfig.calibratePwm);
-  client.println("' min='0' max='255'>");
-  client.println("<p class='help-text'>Motor speed during calibration (lower = gentler)</p>");
-  client.println("</div>");
-  client.println("<button type='submit' class='btn btn-success btn-block'>Save Calibration Speed</button>");
-  client.println("</form>");
-  
-  client.println("<div class='divider'></div>");
-  
-  client.println("<form method='post' action='/calibrate'>");
-  client.println("<input type='hidden' name='calibrate' value='1'>");
-  client.println("<button type='submit' class='btn btn-info btn-block'>Run Fader Calibration</button>");
-  client.println("</form>");
-  client.println("</div></div>");
-  
-  // Touch Sensor Card
-  client.println("<div class='card' style='margin-top: 20px;'>");
-  client.println("<div class='card-header'><h2>Touch Sensor</h2></div>");
-  client.println("<div class='card-body'>");
-  client.println("<form method='get' action='/save'>");
-  
-waitForWriteSpace();
+  waitForWriteSpace(600);
+  client.println(F("</div>")); // container
 
-  client.println("<div class='form-group'>");
-  client.println("<label>Auto Calibration Mode</label>");
-  client.println("<select name='autoCalMode'>");
-  client.print("<option value='0'");
-  if (autoCalibrationMode == 0) client.print(" selected");
-  client.println(">Disabled</option>");
-  client.print("<option value='1'");
-  if (autoCalibrationMode == 1) client.print(" selected");
-  client.println(">Normal (More sensitive, faster baseline changes)</option>");
-  client.print("<option value='2'");
-  if (autoCalibrationMode == 2) client.print(" selected");
-  client.println(">Conservative (Defualt, slower baseline changes due to environment)</option>");
-  client.println("</select>");
-  client.println("<p class='help-text'>Automatic baseline adjustment for environmental changes</p>");
-  client.println("</div>");
-  
-  client.println("<div class='form-group'>");
-  client.println("<label>Touch Threshold</label>");
-  client.print("<input type='number' name='touchThreshold' value='");
-  client.print(touchThreshold);
-  client.println("' min='1' max='255'>");
-  client.println("<p class='help-text'>Higher values = less sensitive (default: 12)</p>");
-  client.println("</div>");
-  
-waitForWriteSpace();
+  client.println(F("<script>"
+                   "function clampChannel(v){v=parseInt(v);if(isNaN(v))return 0;return Math.min(255,Math.max(0,v));}"
+                   "function toHex(v){const h=clampChannel(v).toString(16);return h.length===1?'0'+h:h;}"
+                   "function syncPicker(){const r=document.getElementById('staticRed');const g=document.getElementById('staticGreen');const b=document.getElementById('staticBlue');"
+                   "document.getElementById('staticColorPicker').value='#'+toHex(r.value)+toHex(g.value)+toHex(b.value);}"
+                   "function syncInputs(){const hex=document.getElementById('staticColorPicker').value||'#000000';"
+                   "document.getElementById('staticRed').value=parseInt(hex.substr(1,2),16);"
+                   "document.getElementById('staticGreen').value=parseInt(hex.substr(3,2),16);"
+                   "document.getElementById('staticBlue').value=parseInt(hex.substr(5,2),16);}"
+                   "document.getElementById('staticColorPicker').addEventListener('input',syncInputs);"
+                   "['staticRed','staticGreen','staticBlue'].forEach(id=>{const el=document.getElementById(id);if(el){el.addEventListener('input',syncPicker);}});"
+                   "syncPicker();"
+                   "</script>"));
 
-  client.println("<div class='form-group'>");
-  client.println("<label>Release Threshold</label>");
-  client.print("<input type='number' name='releaseThreshold' value='");
-  client.print(releaseThreshold);
-  client.println("' min='1' max='255'>");
-  client.println("<p class='help-text'>Lower values = harder to release (default: 6)</p>");
-  client.println("</div>");
+  waitForWriteSpace(800);
   
-  client.println("<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>");
-  client.println("<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>");
-  client.println("</form></div></div>");
-  
-  client.println("</div>"); // End container
-  client.println("</body></html>");
+  sendFooter();
+  client.println(F("</body></html>"));
 }
 
 //================================
@@ -1132,88 +1269,66 @@ void handleRoot() {
   // Send navigation header
   sendNavigationHeader("Network Settings");
   
-  client.println("<div class='container'>");
-  
-  waitForWriteSpace();
-  
+  client.println(F("<div class='container'>"));
+  waitForWriteSpace(400);
+
   // Network Settings Card
-  client.println("<div class='card'>");
-  client.println("<h2>Network Settings</h2>");
-  
-  client.println("<form method='get' action='/save'>");
-  
-  client.println("<label>");
-  client.print("<input type='checkbox' name='dhcp' value='on'");
-  if (netConfig.useDHCP) client.print(" checked");
-  client.println("> Use DHCP");
-  client.println("</label>");
-  client.println("<p class='help'>When enabled, static IP settings below are ignored</p>");
-  
-  client.println("<label>Static IP Address</label>");
-  client.print("<input type='text' name='ip' value='");
+  client.println(F("<div class='card'><h2>Network Settings</h2><form method='get' action='/save'>"));
+  client.print(F("<label><input type='checkbox' name='dhcp' value='on'"));
+  if (netConfig.useDHCP) client.print(F(" checked"));
+  client.println(F("> Use DHCP</label><p class='help'>When enabled, static IP settings below are ignored</p>"));
+
+  client.print(F("<label>Static IP Address</label><input type='text' name='ip' value='"));
   client.print(ipToString(netConfig.staticIP));
-  client.println("'>");
-  
-  client.println("<label>Gateway</label>");
-  client.print("<input type='text' name='gw' value='");
+  client.println(F("'>"));
+
+  client.print(F("<label>Gateway</label><input type='text' name='gw' value='"));
   client.print(ipToString(netConfig.gateway));
-  client.println("'>");
-  
-  client.println("<label>Subnet Mask</label>");
-  client.print("<input type='text' name='sn' value='");
+  client.println(F("'>"));
+
+  client.print(F("<label>Subnet Mask</label><input type='text' name='sn' value='"));
   client.print(ipToString(netConfig.subnet));
-  client.println("'>");
-  
-  client.println("<button type='submit'>Save Network Settings</button>");
-  client.println("</form>");
-  
-  client.println("<form method='post' action='/reset_network'>");
-  client.println("<button type='submit' onclick=\"return confirm('Reset network settings?');\">Reset Network</button>");
-  client.println("</form>");
-  
-  client.println("</div>");
-  
-  waitForWriteSpace();
-  
+  client.println(F("'>"));
+
+  client.println(F("<button type='submit'>Save Network Settings</button></form>"));
+  client.println(F("<form method='post' action='/reset_network'>"
+                   "<button type='submit' onclick=\"return confirm('Reset network settings?');\">Reset Network</button>"
+                   "</form></div>"));
+
+  waitForWriteSpace(400);
+
   // Debug Tools Card
-  client.println("<div class='card'>");
-  client.println("<h2>Debug Tools</h2>");
-  
-  client.println("<form method='post' action='/debug'>");
-  client.println("<input type='hidden' name='debug' value='0'>");
-  client.println("<label>");
-  client.print("<input type='checkbox' name='debug' value='1'");
-  if (debugMode) client.print(" checked");
-  client.println("> Enable Serial Debug Output");
-  client.println("</label>");
-  client.println("<button type='submit'>Save Debug Setting</button>");
-  client.println("</form>");
-  
-  client.println("<div class='divider'></div>");
-  
-  client.println("<form method='post' action='/dump'>");
-  client.println("<button type='submit'>Dump EEPROM to Serial</button>");
-  client.println("</form>");
-  
-  client.println("</div>");
-  
-  waitForWriteSpace();
-  
-  // Factory Reset Card
-  client.println("<div class='card'>");
-  client.println("<h2>Factory Reset</h2>");
-  client.println("<p>This will reset all settings to factory defaults.</p>");
-  client.println("<form method='post' action='/reset_defaults'>");
-  client.println("<button type='submit' onclick=\"return confirm('Reset ALL settings?');\">Reset All Settings</button>");
-  client.println("</form>");
-  client.println("</div>");
-  
-  client.println("</div>"); // End container
-  client.println("</body></html>");
+  client.println(F("<div class='card'><h2>Debug Tools</h2>"));
+  client.println(F("<form method='post' action='/debug'><input type='hidden' name='debug' value='0'><label>"));
+  client.print(F("<input type='checkbox' name='debug' value='1'"));
+  if (debugMode) client.print(F(" checked"));
+  client.println(F("> Enable Serial Debug Output</label><p class='help-text' style='color: red;'>Serial debug can cause jitter and slows all processes, DO NOT run in production</p><button type='submit'>Save Debug Setting</button></form>"));
+
+  client.println(F("<div class='divider'></div><form method='post' action='/dump'>"
+                   "<button type='submit'>Dump EEPROM to Serial</button>"
+                   "</form></div>"));
+
+  waitForWriteSpace(400);
+
+  // Factory Reset Teensy Reboot Card
+  client.println(F("<div class='card'><h2>Factory Reset</h2>"
+                   "<p>This will reset all settings to factory defaults.</p>"
+                   "<form method='post' action='/reset_defaults'>"
+                   "<button type='submit' onclick=\"return confirm('Reset ALL settings?');\">Reset All Settings</button>"
+                   "</form>"
+                   "<form method='post' action='/reboot'>"
+                   "<button type='submit' onclick=\"return confirm('Reboot EvoFaderWing?');\">Reboot</button>"
+                   "</form>"
+                   "</div>"));
+
+  client.println(F("</div>")); // End container
+  sendFooter();
+  client.println(F("</body></html>"));
 }
 
-void waitForWriteSpace() {
-  while (client.connected() && client.availableForWrite() < 100) {
+void waitForWriteSpace(size_t minBytes) {
+  while (client.connected() && client.availableForWrite() < minBytes) {
+    Ethernet.loop();
     delay(1);
   }
 }

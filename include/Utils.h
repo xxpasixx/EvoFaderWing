@@ -35,4 +35,7 @@ IPAddress stringToIP(const String &str);
 // Extract parameter from URL query string
 String getParam(String data, const char* key);
 
+// Reset Teensy
+void resetTeensy();
+
 #endif // UTILS_H

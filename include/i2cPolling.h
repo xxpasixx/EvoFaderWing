@@ -9,10 +9,10 @@ void handleI2c();
 void pollSlave(uint8_t address, int slaveIndex);
 void processEncoderData(uint8_t count, uint8_t address);
 void processKeypressData(uint8_t count, uint8_t address);
+void processReleaseAll(uint8_t address);
 
 void sendEncoderOSC(int encoderNumber, bool isPositive, int velocity);
 void sendKeyOSC(uint16_t keyNumber, uint8_t state);
 
 #endif  // I2C_POLLING_H
-
 

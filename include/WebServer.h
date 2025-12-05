@@ -12,7 +12,6 @@ using namespace qindesign::network;
 // GLOBAL WEB SERVER OBJECTS
 //================================
 
-extern EthernetUDP udp;  // Also declare udp for consistency
 extern EthernetServer server;
 extern EthernetClient client;
 
@@ -38,6 +37,7 @@ void handleWebServer();
 void handleNetworkSettings(String request);
 void handleCalibrationSettings(String request);
 void handleFaderSettings(String request);
+void handleLEDSettingsSave(String request);
 void handleTouchSettings(String request);
 void handleRunCalibration();
 void handleDebugToggle(String requestBody);
@@ -47,7 +47,9 @@ void handleNetworkReset();
 // Html building functions
 void handleRoot();
 void handleStatsPage();
+void handleStatsData();
 void handleFaderSettingsPage();
+void handleLEDSettingsPage();
 void handleOSCSettingsPage();
 
 void sendCommonStyles();
@@ -55,11 +57,14 @@ void sendNavigationHeader(const char* pageTitle);
 
 void handleGMA3ShortcutsDownload();
 void handleLuaDownload();
+void handleFavicon();
 
-void waitForWriteSpace();
-
+void waitForWriteSpace(size_t minBytes = 100);
+void sendMessagePage(const char* title, const char* message, const char* redirectUrl = nullptr, int redirectSeconds = 0);
+void handleRebootRequest();
 // Response helpers
 void send404Response();
 void sendRedirect();
+void sendFooter();
 
 #endif // WEB_SERVER_H

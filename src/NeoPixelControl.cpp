@@ -2,6 +2,7 @@
 
 #include "NeoPixelControl.h"
 #include "Utils.h"
+#include "FaderControl.h"
 #include <stdint.h>  // or <cstdint>
 #include <cmath>
 
@@ -29,6 +30,8 @@ void setupNeoPixels() {
     faders[i].red = 255;     // white
     faders[i].green = 255;
     faders[i].blue = 255;
+    faders[i].lastRenderedColor = 0xFFFFFFFF; // force initial render
+    faders[i].lastRenderedSetpoint = 255;     // force initial render
     //faders[i].colorUpdated = true;  // Force initial update
   }
 }
@@ -39,6 +42,7 @@ void setupNeoPixels() {
 
 void updateNeoPixels() {
   unsigned long now = millis();
+  bool pixelsDirty = false;
 
   for (int i = 0; i < NUM_FADERS; i++) {
     Fader& f = faders[i];
@@ -57,6 +61,7 @@ void updateNeoPixels() {
     }
 
     uint32_t color = getScaledColor(f);
+    bool needsUpdate = false;
 
     if (neoPixelDebug && f.currentBrightness != f.lastReportedBrightness) {
       uint8_t r = (f.red * f.currentBrightness) / 255;
@@ -67,14 +72,45 @@ void updateNeoPixels() {
       f.lastReportedBrightness = f.currentBrightness;
     }
 
-    //pixels.setPixelColor(i * PIXELS_PER_FADER, color);
-    for (int j = 0; j < PIXELS_PER_FADER; j++) {
-      pixels.setPixelColor(i * PIXELS_PER_FADER + j, color);
+    if (!Fconfig.useLevelPixels) {
+      needsUpdate = (color != f.lastRenderedColor);
+      // Legacy mode: fill all pixels for this fader with the scaled color
+      for (int j = 0; j < PIXELS_PER_FADER; j++) {
+        pixels.setPixelColor(i * PIXELS_PER_FADER + j, color);
+      }
+    } else {
+      // Level mode: light up pixels per side based on current fader position (0-100)
+      // Use the current setpoint (OSC value 0-100) to avoid analog jitter
+      int oscValue = constrain(f.setpoint, 0, 100);
+      // Round to nearest and clamp so the bottom pixel stays lit
+      int litPerSide = (oscValue * 12 + 50) / 100;  // map 0-100 to 0-12 (rounded)
+      litPerSide = constrain(litPerSide, 1, 12);    // always show at least the bottom pixel
+      needsUpdate = (color != f.lastRenderedColor) || (f.lastRenderedSetpoint != (uint8_t)oscValue);
+
+      for (int j = 0; j < PIXELS_PER_FADER; j++) {
+        bool isLit = false;
+        if (j < 12) {
+          int rel = 11 - j;           // left side, bottom = rel 0
+          isLit = rel < litPerSide;
+        } else {
+          int rel = j - 12;           // right side, bottom = rel 0
+          isLit = rel < litPerSide;
+        }
+        pixels.setPixelColor(i * PIXELS_PER_FADER + j, isLit ? color : pixels.Color(0, 0, 0));
+      }
+      f.lastRenderedSetpoint = (uint8_t)oscValue;
     }
 
+    if (needsUpdate) {
+      f.lastRenderedColor = color;
+      pixelsDirty = true;
+    }
   }
 
-  pixels.show();
+  // Push to strip when something changed
+  if (pixelsDirty) {
+    pixels.show();
+  }
 }
 
 void updateBrightnessOnFaderTouchChange() {
@@ -109,7 +145,6 @@ void updateBaseBrightnessPixels() {
     if (!f.touched) {
       f.brightnessStartTime = now;
       f.targetBrightness = Fconfig.baseBrightness;
-      f.colorUpdated = true;
       // Optionally, set currentBrightness directly if no fade desired:
       // f.currentBrightness = Fconfig.baseBrightness;
 
@@ -320,14 +355,16 @@ void flashAllFadersRed() {
   for (int flash = 0; flash < 5; flash++) {
     // Set all to red
     for (int i = 0; i < NUM_FADERS; i++) {
-      faders[i].red = 255;
-      faders[i].green = 0;
-      faders[i].blue = 0;
+      // Scale red by touchedBrightness
+      uint8_t scaledRed = (uint8_t)((255UL * Fconfig.touchedBrightness) / 255UL);
+      for (int j = 0; j < PIXELS_PER_FADER; j++) {
+        pixels.setPixelColor(i * PIXELS_PER_FADER + j, pixels.Color(scaledRed, 0, 0));
+      }
     }
-    updateNeoPixels();
+    pixels.show();
     delay(100);
     
-    // Restore original colors
+    // Restore original colors and brightness via normal path
     for (int i = 0; i < NUM_FADERS; i++) {
       faders[i].red = originalColors[i][0];
       faders[i].green = originalColors[i][1];

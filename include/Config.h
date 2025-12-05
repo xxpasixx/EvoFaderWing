@@ -8,22 +8,24 @@
 //================================
 // HARDWARE CONFIGURATION
 //================================
-#define SW_VERSION      "0.2"
+#define SW_VERSION      "0.3"
 
 // Fader configuration
 #define NUM_FADERS      10       // Total number of motorized faders
 #define SERIAL_BAUD     115200   // Baud rate for USB serial output/debug
 
-// Motor control settings
-#define DEFAULT_PWM     100      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100
+// Motor control settings THE PWM DEFAULTS ARE SET FOR A 12V PSU, is you use the correct 10v psu you will need to adjust them
+#define MAX_PWM     150      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100-150
 #define CALIB_PWM       80       // Reduced motor speed during auto-calibration phase
-#define MIN_PWM         45       // Minimum PWM to overcome motor inertia
+#define MIN_PWM         40       // Minimum PWM to overcome motor inertia 
 #define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
 #define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
 
 // Fader position tolerances
 #define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
 #define SEND_TOLERANCE   2       // Amout of change in OSC (0-100) before senind an osc update
+#define SLOW_ZONE        25      // OSC units - start slowing earlier for smoother approach
+#define FAST_ZONE        60      // OSC units - when to use full speed
 
 // Calibration settings
 #define PLATEAU_THRESH   2       // Threshold (analog delta) to consider that the fader has stopped moving
@@ -38,6 +40,14 @@
 #define NEOPIXEL_PIN 12
 #define PIXELS_PER_FADER 24
 #define NUM_PIXELS (NUM_FADERS * PIXELS_PER_FADER)
+
+// Executor key NeoPixel strip (40 keys, 2 pixels each)
+#define NUM_EXECUTORS_TRACKED 40
+#define EXECUTOR_PIXELS_PER_KEY 2
+#define EXECUTOR_LED_PIN 52   // Teensy 4.1 pin for the key strip
+#define EXECUTOR_LED_COUNT (NUM_EXECUTORS_TRACKED * EXECUTOR_PIXELS_PER_KEY)
+#define EXECUTOR_BASE_BRIGHTNESS 10   // Default base brightness for populated-but-off keys
+#define EXECUTOR_ACTIVE_BRIGHTNESS 80 // Default brightness for active/on keys (unpopulated stays dark)
 
 // Touch sensor configuration
 #define IRQ_PIN 13
@@ -90,20 +100,34 @@ struct NetworkConfig {
 // Configuration structure that can be saved to EEPROM
 struct FaderConfig {
   uint8_t minPwm;
-  uint8_t defaultPwm;
+  uint8_t maxPwm;
   uint8_t calibratePwm;
   uint8_t targetTolerance;
   uint8_t sendTolerance;
+  uint8_t slowZone;
+  uint8_t fastZone;
   uint8_t baseBrightness;         // Default idle brightness
   uint8_t touchedBrightness;      // Brightness when fader is touched
   unsigned long fadeTime;         // Fade duration in milliseconds
   bool serialDebug;
   bool sendKeystrokes;       // Send keystroke using usb rather than osc for exec keys, this gives more native support (can store using exec key directly)
+  bool useLevelPixels;       // When true, render per-fader level bars instead of full fill
+};
+
+// Executor LED configuration
+struct ExecConfig {
+  uint8_t baseBrightness;     // Brightness when executor is populated but off
+  uint8_t activeBrightness;   // Brightness when executor is on/active
+  bool useStaticColor;        // When true, use static RGB color instead of white
+  uint8_t staticRed;          // Static color components (0-255)
+  uint8_t staticGreen;
+  uint8_t staticBlue;
+  uint8_t reserved[2];        // Space for future options
 };
 
 // Touch sensor configuration
 struct TouchConfig {
-  uint8_t autoCalibrationMode;  // 0=disabled, 1=normal, 2=conservative (default)
+  uint8_t autoCalibrationMode;  // 0=disabled, 1=enabled (autoconfig)
   uint8_t touchThreshold;       // Default 12, higher = less sensitive
   uint8_t releaseThreshold;     // Default 6, lower = harder to release
   uint8_t reserved[5];          // Reserved space for future touch parameters (unused for now)
@@ -135,13 +159,14 @@ struct Fader {
   uint8_t red;           // Red component (0-255)
   uint8_t green;         // Green component (0-255)
   uint8_t blue;          // Blue component (0-255)
-  bool colorUpdated;     // Flag to indicate new color data received
 
   // NeoPixel brightness fading
   uint8_t currentBrightness;           // Actual brightness applied this frame
   uint8_t targetBrightness;            // Target brightness based on touch
   unsigned long brightnessStartTime;   // When fade began
   uint8_t lastReportedBrightness;      // For debug: last brightness sent
+  uint32_t lastRenderedColor;          // Last color pushed to strip (scaled)
+  uint8_t lastRenderedSetpoint;        // Last setpoint used when rendering level pixels
   
   // Touch Values
   bool touched;                 // Fader is touched or not
@@ -160,6 +185,7 @@ extern Fader faders[NUM_FADERS];
 // Configuration instances
 extern NetworkConfig netConfig;
 extern FaderConfig Fconfig;
+extern ExecConfig execConfig;
 
 // Page tracking
 extern int currentOSCPage;
@@ -172,6 +198,9 @@ extern uint8_t releaseThreshold;
 // Network reset check
 extern bool checkForReset;
 extern unsigned long resetCheckStartTime;
+
+// Calibration state flag
+extern bool calibrationInProgress;
 
 void displayIPAddress();
 void displayShowResetHeader();

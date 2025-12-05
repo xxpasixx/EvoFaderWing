@@ -9,6 +9,8 @@
 #include <IPAddress.h>
 #include "Config.h"
 
+static bool ipScreenDirty = true; // track when IP screen needs redraw
+
 // === Constructor and Destructor ===
 
 OLED::OLED() {
@@ -119,6 +121,7 @@ uint8_t OLED::getAddress() {
 void OLED::clear() {
     // Clear display buffer
     if (!displayInitialized || !oledDisplay) return;
+    ipScreenDirty = true;
     oledDisplay->clearDisplay();
 }
 
@@ -255,6 +258,7 @@ void OLED::showHeader(const char* title) {
     // Display title header on first line with larger text
     if (!displayInitialized || !oledDisplay) return;
     
+    ipScreenDirty = true;
     clearLine(0);
     setCursor(0, 0);
     setTextSize(TEXT_SIZE_SMALL);  // Larger text for header
@@ -420,17 +424,21 @@ void OLED::clearLine(uint8_t line, uint8_t textSize) {
 }
 
 void OLED::clearDebugLines() {
-    // Clear all lines except the header (line 0)
-    if (!displayInitialized || !oledDisplay) return;
-    
-    for (int i = 2; i < 8; i++) {
-        clearLine(i);
-    }
-    display();
+    // Debug output to OLED is disabled.
 }
 
 void OLED::showIPAddress(IPAddress ip, uint16_t recvPort, IPAddress sendIP, uint16_t sendPort) {
     if (!displayInitialized || !oledDisplay) return;
+
+    static IPAddress lastIP(0, 0, 0, 0);
+    static IPAddress lastSendIP(0, 0, 0, 0);
+    static uint16_t lastRecvPort = 0;
+    static uint16_t lastSendPort = 0;
+    static bool hasLast = false;
+
+    if (!ipScreenDirty && hasLast && ip == lastIP && recvPort == lastRecvPort && sendIP == lastSendIP && sendPort == lastSendPort) {
+        return; // No change, skip redraw
+    }
 
     clear();
 
@@ -454,35 +462,15 @@ void OLED::showIPAddress(IPAddress ip, uint16_t recvPort, IPAddress sendIP, uint
     printf("%d.%d.%d.%d:%d", sendIP[0], sendIP[1], sendIP[2], sendIP[3], sendPort);
 
     display();
+
+    lastIP = ip;
+    lastSendIP = sendIP;
+    lastRecvPort = recvPort;
+    lastSendPort = sendPort;
+    hasLast = true;
+    ipScreenDirty = false;
 }
 
-// === Debug Line Buffer ===
-#define MAX_DEBUG_LINES 5
-static String debugLines[MAX_DEBUG_LINES];
-static unsigned long lastDebugDraw = 0;
-static const unsigned long debugDrawInterval = 200;  // ms
-
 void OLED::addDebugLine(const char* text) {
-    if (!displayInitialized || !oledDisplay || !text) return;
-
-    // Shift lines up
-    for (int i = 0; i < MAX_DEBUG_LINES - 1; i++) {
-        debugLines[i] = debugLines[i + 1];
-    }
-    debugLines[MAX_DEBUG_LINES - 1] = String(text);
-
-    // Throttle refresh rate
-    unsigned long now = millis();
-    if (now - lastDebugDraw < debugDrawInterval) return;
-    lastDebugDraw = now;
-
-    // Draw bottom lines
-    for (int i = 0; i < MAX_DEBUG_LINES; i++) {
-        clearLine(3 + i);
-        setCursor(0, (3 + i) * CHAR_HEIGHT_SMALL);
-        setTextSize(TEXT_SIZE_SMALL);
-        setTextColor(SSD1306_WHITE);
-        oledDisplay->print(debugLines[i]);
-    }
-    oledDisplay->display();
+    // Debug output to OLED is disabled.
 }

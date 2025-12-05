@@ -4,17 +4,51 @@
 #include "Utils.h"
 #include "FaderControl.h"
 #include "Config.h"
+#include "ExecutorStatus.h"
+#include "KeyLedControl.h"
+#include <AsyncUDP_Teensy41.h>
 
 
 //================================
 // GLOBAL NETWORK OBJECTS
 //================================
 
-EthernetUDP udp;
+AsyncUDP oscUdp;
+
+bool faderColorDebug = false;
+
+// Forward declarations for async callbacks
+void handleBundledExecutorUpdate(LiteOSCParser& parser);
+void handleColorUpdate(LiteOSCParser& parser);
 
 //================================
 // NETWORK SETUP
 //================================
+
+static void attachUdpHandler() {
+  oscUdp.onPacket([](AsyncUDPPacket &packet) {
+    const uint8_t* data = packet.data();
+    size_t len = packet.length();
+    LiteOSCParser parser;
+
+    if (!parser.parse(data, len)) {
+      debugPrint("Invalid OSC message.");
+      return;
+    }
+
+    const char* addr = parser.getAddress();
+
+    if (strstr(addr, "/execUpdate") != NULL) {
+      handleBundledExecutorUpdate(parser);
+    } else if (strstr(addr, "/colorUpdate") != NULL) {
+      handleColorUpdate(parser);
+    } else if (strstr(addr, "/updatePage/current") != NULL) {
+      if (parser.getTag(0) == 'i') {
+        handlePageUpdate(addr, parser.getInt(0));
+      }
+    }
+  });
+}
 
 void setupNetwork() {
   debugPrint("Setting up network...");
@@ -38,12 +72,17 @@ void setupNetwork() {
   IPAddress ip = Ethernet.localIP();
   debugPrintf("IP Address: %u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
 
-  // Start UDP for OSC
-  udp.begin(netConfig.receivePort);
-  
   // Set up mDNS for service discovery
   MDNS.begin(kServiceName);
   MDNS.addService("_osc", "_udp", netConfig.receivePort);
+
+  // Start AsyncUDP listener
+  if (oscUdp.listen(netConfig.receivePort)) {
+    attachUdpHandler();
+    debugPrintf("AsyncUDP listening on port %d\n", netConfig.receivePort);
+  } else {
+    debugPrint("Failed to start AsyncUDP listener");
+  }
   debugPrint("OSC and mDNS initialized");
 }
 
@@ -51,10 +90,11 @@ void setupNetwork() {
 void restartUDP() {
   debugPrint("Restarting UDP service...");
 
-  udp.begin(0); // Safely close the previous socket
-  delay(10);    // Optional: short delay to ensure socket is cleared
+  oscUdp.close();
+  delay(10);
 
-  if (udp.begin(netConfig.receivePort)) {
+  if (oscUdp.listen(netConfig.receivePort)) {
+    attachUdpHandler();
     debugPrintf("UDP restarted on port %d\n", netConfig.receivePort);
   } else {
     debugPrint("Failed to restart UDP.");
@@ -81,53 +121,95 @@ void handlePageUpdate(const char *address, int value) {
 }
 
 
+static bool parseSimpleColorString(const char* colorString, uint8_t& r, uint8_t& g, uint8_t& b) {
+  if (!colorString) return false;
 
-// Handle bundled fader update messages
-void handleBundledFaderUpdate(LiteOSCParser& parser) {
-  // Expected format: /faderUpdate,iiiiiiiiiiissssssssss,PAGE,F201,F202...F210,C201,C202...C210
-  
-  if (parser.getArgCount() < 21) {
-    debugPrint("Invalid bundled fader message - not enough arguments");
+  char buffer[64];
+  strncpy(buffer, colorString, sizeof(buffer) - 1);
+  buffer[sizeof(buffer) - 1] = '\0';
+
+  char* token = strtok(buffer, ",;");
+  if (!token) return false;
+  r = constrain(atoi(token), 0, 255);
+
+  token = strtok(nullptr, ",;");
+  if (!token) return false;
+  g = constrain(atoi(token), 0, 255);
+
+  token = strtok(nullptr, ",;");
+  if (!token) return false;
+  b = constrain(atoi(token), 0, 255);
+
+  return true;
+}
+
+static void applyColorToExecutor(int oscId, const char* colorString) {
+  uint8_t r, g, b;
+  if (!parseSimpleColorString(colorString, r, g, b)) {
     return;
   }
-  
-  // Parse page number (argument 0)
+
+  setExecutorColorByID(oscId, r, g, b);
+
+  if (oscId >= 201 && oscId <= 210) {
+    int faderIndex = getFaderIndexFromID(oscId);
+    if (faderIndex >= 0 && faderIndex < NUM_FADERS) {
+      faders[faderIndex].red = r;
+      faders[faderIndex].green = g;
+      faders[faderIndex].blue = b;
+
+      if (faderColorDebug) {
+        debugPrintf("Fader %d: Using RGB(%d,%d,%d)\n", oscId, r, g, b);
+      }
+    }
+  }
+}
+
+
+// Handle bundled executor updates: page + 10 fader setpoints + 40 executor statuses
+void handleBundledExecutorUpdate(LiteOSCParser& parser) {
+  const int expectedArgs = 1 + 10 + NUM_EXECUTORS_TRACKED;
+
+  if (parser.getArgCount() < expectedArgs) {
+    debugPrint("Invalid exec bundle - not enough arguments");
+    return;
+  }
+
   if (parser.getTag(0) != 'i') {
-    debugPrint("Invalid bundled fader message - page not integer");
+    debugPrint("Invalid exec bundle - page not integer");
     return;
   }
-  
+
   int pageNum = parser.getInt(0);
-  
-  // Update current page if it changed
   if (pageNum != currentOSCPage) {
-    debugPrintf("Page changed from %d to %d (via bundled message)\n", currentOSCPage, pageNum);
+    debugPrintf("Page changed from %d to %d (via exec bundle)\n", currentOSCPage, pageNum);
     currentOSCPage = pageNum;
   }
-  
-  // Track if any setpoints need updating
+
+  bool stateChanged = false;
   bool needToMoveFaders = false;
-  
-  // Parse fader values (arguments 1-10 for faders 201-210)
+  bool blockFaderUpdates = calibrationInProgress;
+
+  // Fader values (201-210) occupy args 1-10
   for (int i = 0; i < 10; i++) {
-    int argIndex = i + 1; // Arguments 1-10
-    int faderOscID = 201 + i; // Fader IDs 201-210
-    
+    int argIndex = i + 1;
+    int faderOscID = 201 + i;
+
     if (parser.getTag(argIndex) != 'i') {
       debugPrintf("Invalid fader value type for fader %d\n", faderOscID);
       continue;
     }
-    
+
     int oscValue = parser.getInt(argIndex);
     int faderIndex = getFaderIndexFromID(faderOscID);
-    
-    if (faderIndex >= 0 && faderIndex < NUM_FADERS) {
-      // Only update if fader is not currently being touched (avoid feedback)
-      if (!faders[faderIndex].touched) {
-        
-        // Check if the value actually changed before updating
-        int currentOscvalue = readFadertoOSC(faders[faderIndex]);
 
+    if (blockFaderUpdates) {
+      continue;
+    }
+
+    if (faderIndex >= 0 && faderIndex < NUM_FADERS) {
+      if (!faders[faderIndex].touched) {
+        int currentOscvalue = readFadertoOSC(faders[faderIndex]);
         if (abs(oscValue - currentOscvalue) > Fconfig.targetTolerance) {
           debugPrintf("Updating fader %d setpoint: %d -> %d\n", faderOscID, currentOscvalue, oscValue);
           setFaderSetpoint(faderIndex, oscValue);
@@ -138,67 +220,60 @@ void handleBundledFaderUpdate(LiteOSCParser& parser) {
       debugPrintf("Fader index not found for OSC ID %d\n", faderOscID);
     }
   }
-  
-  
-  // Parse color values (arguments 11-20 for faders 201-210)
-  for (int i = 0; i < 10; i++) {
-    int argIndex = i + 11; // Arguments 11-20
-    int faderOscID = 201 + i; // Fader IDs 201-210
-    
-    if (parser.getTag(argIndex) != 's') {
-      debugPrintf("Invalid color value type for fader %d\n", faderOscID);
+
+  // Executor statuses (101-410) start after the fader block
+  for (int i = 0; i < NUM_EXECUTORS_TRACKED; ++i) {
+    int argIndex = 11 + i;
+    if (parser.getTag(argIndex) != 'i') {
+      debugPrintf("Invalid exec status type for executor %d\n", EXECUTOR_IDS[i]);
       continue;
     }
-    
-    const char* colorString = parser.getString(argIndex);
-    int faderIndex = getFaderIndexFromID(faderOscID);
-    
-    if (faderIndex >= 0 && faderIndex < NUM_FADERS && !faders[faderIndex].touched) {
-      // Parse and update color values
-      parseDualColorValues(colorString, faders[faderIndex]);
-      //debugPrintf("Updated color for fader %d: %s\n", faderOscID, colorString);
-    } else {
-      debugPrintf("Fader index not found for color update, OSC ID %d\n", faderOscID);
+
+    int raw = parser.getInt(argIndex);
+    uint8_t status = raw < 0 ? 0 : (raw > 2 ? 2 : raw); // 0=empty,1=off,2=on
+    if (setExecutorStateByIndex(i, status)) {
+      stateChanged = true;
     }
   }
 
-    // Move all faders to their new setpoints if any changed
+  if (stateChanged) {
+    markKeyLedsDirty();
+  }
+
   if (needToMoveFaders) {
     debugPrint("Moving faders to new setpoints");
     moveAllFadersToSetpoints();
   }
-  
-  debugPrint("Bundled fader update complete");
 }
 
-// Handle osc messages comming IN
+// Handle bundled color updates: page + 40 color strings (execs 101-410)
+void handleColorUpdate(LiteOSCParser& parser) {
+  const int expectedArgs = 1 + NUM_EXECUTORS_TRACKED;
 
-void handleIncomingOsc() {
-  int size = udp.parsePacket();
-  if (size <= 0) return;
-
-  const uint8_t *data = udp.data();
-  LiteOSCParser parser;
-
-  if (!parser.parse(data, size)) {
-    debugPrint("Invalid OSC message.");
+  if (parser.getArgCount() < expectedArgs) {
+    debugPrint("Invalid color bundle - not enough arguments");
     return;
   }
 
-  const char* addr = parser.getAddress();
-
-  // Handle bundled fader update messages
-  if (strstr(addr, "/faderUpdate") != NULL) {
-    handleBundledFaderUpdate(parser);
+  if (parser.getTag(0) != 'i') {
+    debugPrint("Invalid color bundle - page not integer");
+    return;
   }
 
-  // Handle page update messages
-  else if (strstr(addr, "/updatePage/current") != NULL) {
-    if (parser.getTag(0) == 'i') {
-      handlePageUpdate(addr, parser.getInt(0));
+  int pageNum = parser.getInt(0);
+  if (pageNum != currentOSCPage) {
+    debugPrintf("Page changed from %d to %d (via color bundle)\n", currentOSCPage, pageNum);
+    currentOSCPage = pageNum;
+  }
+
+  for (int i = 0; i < NUM_EXECUTORS_TRACKED; ++i) {
+    int argIndex = i + 1;
+    if (parser.getTag(argIndex) != 's') {
+      debugPrintf("Invalid color type for executor %d\n", EXECUTOR_IDS[i]);
+      continue;
     }
+    applyColorToExecutor(EXECUTOR_IDS[i], parser.getString(argIndex));
   }
-
 }
 
 
@@ -241,9 +316,7 @@ void sendOscMessage(const char* address, const char* typeTag, const void* value)
     return;
   }
 
-  udp.beginPacket(netConfig.sendToIP, netConfig.sendPort);
-  udp.write(buffer, len);
-  udp.endPacket();
+  oscUdp.writeTo(buffer, len, netConfig.sendToIP, netConfig.sendPort);
 }
 
 
@@ -252,84 +325,6 @@ void sendOscMessage(const char* address, const char* typeTag, const void* value)
 //================================
 // OSC HELPER FUNCTIONS
 //================================
-
-
-//We are sending 2 colors per fader, color data for exec 101-110 and 201-210 so if we assign a fader to 101 we will stil get correct fader color
-
-// Page color data out of a bundled message
-void parseDualColorValues(const char *colorString, Fader& f) {
-  char buffer[128];  // Increased buffer size for 8 color values
-  strncpy(buffer, colorString, 127);
-  buffer[127] = '\0'; // Ensure null-termination
-  
-  // Parse primary color (first 4 values: R1;G1;B1;A1)
-  int primaryRed = 0, primaryGreen = 0, primaryBlue = 0;
-  int secondaryRed = 0, secondaryGreen = 0, secondaryBlue = 0;
-  
-  char *ptr = strtok(buffer, ";");
-  if (ptr != NULL) {
-    primaryRed = constrain(atoi(ptr), 0, 255);
-    
-    ptr = strtok(NULL, ";");
-    if (ptr != NULL) {
-      primaryGreen = constrain(atoi(ptr), 0, 255);
-      
-      ptr = strtok(NULL, ";");
-      if (ptr != NULL) {
-        primaryBlue = constrain(atoi(ptr), 0, 255);
-        
-        // Skip primary alpha (4th value)
-        ptr = strtok(NULL, ";");
-        if (ptr != NULL) {
-          // Parse secondary color (next 4 values: R2;G2;B2;A2)
-          ptr = strtok(NULL, ";");
-          if (ptr != NULL) {
-            secondaryRed = constrain(atoi(ptr), 0, 255);
-            
-            ptr = strtok(NULL, ";");
-            if (ptr != NULL) {
-              secondaryGreen = constrain(atoi(ptr), 0, 255);
-              
-              ptr = strtok(NULL, ";");
-              if (ptr != NULL) {
-                secondaryBlue = constrain(atoi(ptr), 0, 255);
-                // Secondary alpha (8th value) is ignored
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  // Logic to choose between primary and secondary color
-  if (primaryRed == 0 && primaryGreen == 0 && primaryBlue == 0) {
-    // Primary is all zeros (black/off), use secondary color
-    f.red = secondaryRed;
-    f.green = secondaryGreen;
-    f.blue = secondaryBlue;
-    
-    if (debugMode) {
-      debugPrintf("Fader %d: Primary color is black, using secondary RGB(%d,%d,%d)\n", 
-                 f.oscID, secondaryRed, secondaryGreen, secondaryBlue);
-    }
-  } else {
-    // Primary has color, use it
-    f.red = primaryRed;
-    f.green = primaryGreen;
-    f.blue = primaryBlue;
-    
-    if (debugMode) {
-      debugPrintf("Fader %d: Using primary RGB(%d,%d,%d)\n", 
-                 f.oscID, primaryRed, primaryGreen, primaryBlue);
-    }
-  }
-  
-  // Mark that color has been updated
-  f.colorUpdated = true;
-}
-
-
 
 
 // Checks if the buffer starts as a valid bundle

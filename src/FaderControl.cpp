@@ -7,9 +7,10 @@
 #include "NeoPixelControl.h"
 
 
-
+bool faderDebug = false;
 bool FaderRetryPending = false;
 unsigned long FaderRetryTime = 0;
+static bool FaderMoveActive = false;
 
 //================================
 // MOTOR CONTROL
@@ -39,7 +40,7 @@ void driveMotorWithPWM(Fader& f, int direction, int pwmValue) {
   // Apply custom PWM speed
   analogWrite(f.pwmPin, pwmValue);
   
-  if (debugMode) {
+  if (faderDebug) {
     debugPrintf("Fader %d: Motor PWM: %d, Dir: %s, Setpoint: %d\n", 
                f.oscID, pwmValue, direction > 0 ? "UP" : "DOWN", f.setpoint);
   }
@@ -50,11 +51,20 @@ int calculateVelocityPWM(int difference) {
   
   // Define PWM ranges
   const int minPWM = Fconfig.minPwm;   // Minimum PWM to ensure movement (adjust as needed)
-  const int maxPWM = Fconfig.defaultPwm;  // Use your existing max PWM
+  const int maxPWM = Fconfig.maxPwm;  // Use your existing max PWM
   
   // Define distance thresholds for different speeds
-  const int slowZone = 5;   // OSC units - when to start slowing down DEFUALT GOOD MOVMENT WITH THIS UNIT
-  const int fastZone = 20;  // OSC units - when to use full speed DEFUALT GOOD MOVMENT WITH THIS UNIT
+  int slowZone = Fconfig.slowZone;   // OSC units - start slowing earlier for smoother approach
+  int fastZone = Fconfig.fastZone;   // OSC units - when to use full speed
+  // Guard against invalid values (OSC is 0-100)
+  if (slowZone < 0) slowZone = 0;
+  if (fastZone < 0) fastZone = 0;
+  if (slowZone > 100) slowZone = 100;
+  if (fastZone > 100) fastZone = 100;
+  if (fastZone <= slowZone) {
+    slowZone = SLOW_ZONE;
+    fastZone = FAST_ZONE;
+  }
   
   
   int pwmValue;
@@ -80,6 +90,12 @@ int calculateVelocityPWM(int difference) {
 //================================
 
 void moveAllFadersToSetpoints() {
+  if (FaderMoveActive) {
+    // Already running; let the current pass finish using updated setpoints
+    return;
+  }
+  FaderMoveActive = true;
+
   bool allFadersAtTarget = false;
   unsigned long moveStartTime = millis();
 
@@ -111,7 +127,7 @@ void moveAllFadersToSetpoints() {
           driveMotorWithPWM(f, -1, pwm);
         }
 
-        if (debugMode) {
+        if (faderDebug) {
           debugPrintf("Fader %d: Current OSC: %d, Target OSC: %d, Diff: %d\n", 
                      f.oscID, currentOscValue, f.setpoint, difference);
         }
@@ -124,39 +140,54 @@ void moveAllFadersToSetpoints() {
     }
     
     // Small delay to prevent overwhelming the system
-    delay(5);
+    delay(1);
     
     // Add timeout protection to prevent infinite loops
 
     if (millis() - moveStartTime > FADER_MOVE_TIMEOUT) {
       // Stop all motors and flash red on faders that didn't reach target
+      bool failed[NUM_FADERS] = {false};
+      uint8_t origColors[NUM_FADERS][3] = {{0}};
+      uint8_t scaledRed = (uint8_t)((255UL * Fconfig.touchedBrightness) / 255UL);
+
       for (int i = 0; i < NUM_FADERS; i++) {
         driveMotorWithPWM(faders[i], 0, 0);
-        
-        // Check if this fader failed to reach target
         int currentOscValue = readFadertoOSC(faders[i]);
         int difference = faders[i].setpoint - currentOscValue;
-        
         if (abs(difference) > Fconfig.targetTolerance && !faders[i].touched) {
-          // Flash red 3 times for failed faders
-          
-          uint8_t origR = faders[i].red, origG = faders[i].green, origB = faders[i].blue;
-          for (int flash = 0; flash < 3; flash++) {
-            faders[i].red = 255; faders[i].green = 0; faders[i].blue = 0;
-            updateNeoPixels();
-            delay(100);
-            faders[i].red = origR; faders[i].green = origG; faders[i].blue = origB;
-            updateNeoPixels();
-            delay(100);
-          }
+          failed[i] = true;
+          origColors[i][0] = faders[i].red;
+          origColors[i][1] = faders[i].green;
+          origColors[i][2] = faders[i].blue;
         }
       }
+
+      // Flash all failed faders together (full strip red) without using
+      for (int flash = 0; flash < 3; flash++) {
+        for (int i = 0; i < NUM_FADERS; i++) {
+          if (!failed[i]) continue;
+          for (int j = 0; j < PIXELS_PER_FADER; j++) {
+            pixels.setPixelColor(i * PIXELS_PER_FADER + j, pixels.Color(scaledRed, 0, 0));
+          }
+        }
+        pixels.show();
+        delay(150);
+
+        for (int i = 0; i < NUM_FADERS; i++) {
+          if (!failed[i]) continue;
+          for (int j = 0; j < PIXELS_PER_FADER; j++) {
+            pixels.setPixelColor(i * PIXELS_PER_FADER + j, pixels.Color(origColors[i][0], origColors[i][1], origColors[i][2]));
+          }
+        }
+        pixels.show();
+        delay(50);
+      }
       
-      // Set retry flag
+      // Set retry flag - Todo: Set a max retry, maybe a failed fader flag and visual feedback of failed fader all red leds?
       FaderRetryPending = true;
       FaderRetryTime = millis() + RETRY_INTERVAL;
       
-      if (debugMode) {
+      if (faderDebug) {
         debugPrintf("Fader movement timeout - will retry in %lu seconds\n", RETRY_INTERVAL/1000);
       }
       break;
@@ -164,9 +195,10 @@ void moveAllFadersToSetpoints() {
 
   }
   
-  if (debugMode && allFadersAtTarget) {
+  if (allFadersAtTarget && faderDebug) {
     debugPrintf("All faders have reached their setpoints\n");
   }
+  FaderMoveActive = false;
 }
 
 // Function to set a new setpoint for a specific fader (called when OSC message received)
@@ -175,7 +207,7 @@ void setFaderSetpoint(int faderIndex, int oscValue) {
     // Store the OSC value (0-100) directly as setpoint
     faders[faderIndex].setpoint = constrain(oscValue, 0, 100);
     
-    if (debugMode) {
+    if (faderDebug) {
       debugPrintf("Fader %d setpoint set to OSC value: %d\n", 
                  faders[faderIndex].oscID, oscValue);
     }
@@ -211,7 +243,7 @@ void handleFaders() {
         
         f.setpoint = currentOscValue;
 
-        if (debugMode) {
+        if (faderDebug) {
           debugPrintf("Fader %d position update: %d\n", f.oscID, currentOscValue);
         }
     }
@@ -228,17 +260,17 @@ int readFadertoOSC(Fader& f) {
 
   // Clamp near-bottom analog values to force OSC = 0
   if (analogValue <= f.minVal + 4) {
-    if (debugMode) {
+    //if (faderDebug) {
       //debugPrintf("Fader %d: Clamped to 0 (analog=%d, minVal=%d)\n", f.oscID, analogValue, f.minVal);
-    }
+    //}
     return 0;
   }
 
   // Clamp near-top analog values to force OSC = 100
   if (analogValue >= f.maxVal - 4) {
-    if (debugMode) {
+    //if (faderDebug) {
       //debugPrintf("Fader %d: Clamped to 100 (analog=%d, maxVal=%d)\n", f.oscID, analogValue, f.maxVal);
-    }
+    //}
     return 100;
   }
 
@@ -283,7 +315,7 @@ int getFaderIndexFromID(int id) {
 void checkFaderRetry() {
   if (FaderRetryPending && millis() >= FaderRetryTime) {
     FaderRetryPending = false;
-    if (debugMode) {
+    if (faderDebug) {
       debugPrint("Retrying fader movement...");
     }
     moveAllFadersToSetpoints();

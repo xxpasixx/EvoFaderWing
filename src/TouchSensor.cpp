@@ -80,8 +80,11 @@ bool setupTouch() {
     lastTouchError = "MPR121 not found at address 0x5A. Check wiring!";
     return false;
   }
-  
-  // Set global touch and release thresholds for all electrodes
+
+  // Configure auto-calibration using the library's autoconfig path
+  configureAutoCalibration();
+
+  // Set global touch and release thresholds for all electrodes (after autoconfig)
   mpr121.setThresholds(touchThreshold, releaseThreshold);
   
   // Initialize debounce and state arrays
@@ -89,9 +92,6 @@ bool setupTouch() {
     debounceStart[i] = 0;
     touchConfirmed[i] = false;
   }
-  
-  // Configure auto-calibration to conservative mode (default)
-  configureAutoCalibration();
   
   // Attach interrupt handler to IRQ pin
   attachInterrupt(digitalPinToInterrupt(IRQ_PIN), handleTouchInterrupt, FALLING);
@@ -177,29 +177,26 @@ bool processTouchChanges() {
 // CALIBRATION FUNCTIONS
 //================================
 
+void applyAutoconfig(bool enable) {
+  if (enable) {
+    // Enable Adafruit's autoconfig with standard limits for 3.3V
+    mpr121.writeRegister(MPR121_AUTOCONFIG0, 0x0B);
+    mpr121.writeRegister(MPR121_UPLIMIT, 200);
+    mpr121.writeRegister(MPR121_TARGETLIMIT, 180);
+    mpr121.writeRegister(MPR121_LOWLIMIT, 130);
+  } else {
+    // Disable autoconfig
+    mpr121.writeRegister(MPR121_AUTOCONFIG0, 0x00);
+  }
+}
+
 void manualTouchCalibration() {
-  // Set touch and release thresholds for all electrodes
-  mpr121.setThresholds(touchThreshold, releaseThreshold);
-  
-  // Recalibrate baseline values (what "no touch" looks like)
   recalibrateBaselines();
 }
 
 void recalibrateBaselines() {
-  // Stop the sensor temporarily
-  mpr121.writeRegister(0x5E, 0x00);
-  delay(10);
-  
-  // Trigger a full reset with auto-configuration
-  mpr121.writeRegister(0x80, 0x63);
-  delay(10);
-  
-  // Resume normal operation
-  // Enable all 12 electrodes (0x8F = binary 10001111)
-  mpr121.writeRegister(0x5E, 0x8F);
-  
-  // Reapply current auto-calibration settings
   configureAutoCalibration();
+  mpr121.setThresholds(touchThreshold, releaseThreshold);
 }
 
 //================================
@@ -208,9 +205,9 @@ void recalibrateBaselines() {
 
 void setAutoTouchCalibration(int mode) {
   // Validate input
-  if (mode < 0 || mode > 2) {
+  if (mode < 0 || mode > 1) {
     touchErrorOccurred = true;
-    lastTouchError = "Invalid auto-calibration mode. Use 0-2.";
+    lastTouchError = "Invalid auto-calibration mode. Use 0 or 1.";
     return;
   }
   
@@ -222,52 +219,11 @@ void setAutoTouchCalibration(int mode) {
 }
 
 void configureAutoCalibration() {
-  switch (autoCalibrationMode) {
-    case 0: // Disabled - baselines never change
-      // Set all parameters to 0xFF to disable auto-calibration
-      mpr121.writeRegister(MPR121_MHDR, 0xFF);
-      mpr121.writeRegister(MPR121_NHDR, 0xFF);
-      mpr121.writeRegister(MPR121_NCLR, 0xFF);
-      mpr121.writeRegister(MPR121_FDLR, 0xFF);
-      mpr121.writeRegister(MPR121_MHDF, 0xFF);
-      mpr121.writeRegister(MPR121_NHDF, 0xFF);
-      mpr121.writeRegister(MPR121_NCLF, 0xFF);
-      mpr121.writeRegister(MPR121_FDLF, 0xFF);
-      mpr121.writeRegister(MPR121_NHDT, 0xFF);
-      mpr121.writeRegister(MPR121_NCLT, 0xFF);
-      mpr121.writeRegister(MPR121_FDLT, 0xFF);
-      break;
-      
-    case 1: // Normal - standard auto-calibration
-      // Use manufacturer recommended values for normal operation
-      mpr121.writeRegister(MPR121_MHDR, 0x01);
-      mpr121.writeRegister(MPR121_NHDR, 0x01);
-      mpr121.writeRegister(MPR121_NCLR, 0x0E);
-      mpr121.writeRegister(MPR121_FDLR, 0x00);
-      mpr121.writeRegister(MPR121_MHDF, 0x01);
-      mpr121.writeRegister(MPR121_NHDF, 0x05);
-      mpr121.writeRegister(MPR121_NCLF, 0x01);
-      mpr121.writeRegister(MPR121_FDLF, 0x00);
-      mpr121.writeRegister(MPR121_NHDT, 0x00);
-      mpr121.writeRegister(MPR121_NCLT, 0x00);
-      mpr121.writeRegister(MPR121_FDLT, 0x00);
-      break;
-      
-    case 2: // Conservative - slow adaptation (DEFAULT)
-      // Settings that only adapt to real environmental changes
-      mpr121.writeRegister(MPR121_MHDR, 0x01);
-      mpr121.writeRegister(MPR121_NHDR, 0x01);
-      mpr121.writeRegister(MPR121_NCLR, 0x1C);
-      mpr121.writeRegister(MPR121_FDLR, 0x08);
-      mpr121.writeRegister(MPR121_MHDF, 0x01);
-      mpr121.writeRegister(MPR121_NHDF, 0x01);
-      mpr121.writeRegister(MPR121_NCLF, 0x1C);
-      mpr121.writeRegister(MPR121_FDLF, 0x08);
-      mpr121.writeRegister(MPR121_NHDT, 0x01);
-      mpr121.writeRegister(MPR121_NCLT, 0x10);
-      mpr121.writeRegister(MPR121_FDLT, 0x20);
-      break;
-  }
+  // Toggle autoconfig based on mode: 0 = off, 1/2 = on
+  mpr121.writeRegister(MPR121_ECR, 0x00);  // Stop electrodes while reconfiguring
+  bool enableAutoconfig = autoCalibrationMode != 0;
+  applyAutoconfig(enableAutoconfig);
+  mpr121.writeRegister(MPR121_ECR, 0x8C);  // Enable 12 electrodes (0x80 + 12)
 }
 
 //================================
@@ -276,45 +232,24 @@ void configureAutoCalibration() {
 
 void handleTouchError() {
   touchErrorOccurred = true;
-  
-  // Calculate exponential backoff delay
-  unsigned long currentTime = millis();
-  unsigned long timeSinceLastReinit = currentTime - lastReinitTime;
-  unsigned long requiredDelay = REINIT_DELAY_BASE * (1 << reinitializationAttempts);
-  
-  // If we haven't waited long enough since last attempt, exit
-  if (timeSinceLastReinit < requiredDelay && reinitializationAttempts > 0) {
-    return;
-  }
-  
-  // Check if we've exceeded maximum attempts
-  if (reinitializationAttempts >= MAX_REINIT_ATTEMPTS) {
-    lastTouchError = "MPR121 failed after " + String(MAX_REINIT_ATTEMPTS) + " reinit attempts";
-    return;
-  }
-  
-  // Increment counter and record time
-  reinitializationAttempts++;
-  lastReinitTime = currentTime;
-  
-  // Try to reinitialize with more robust sequence
+  // Always attempt immediate reinit; no backoff/limits
   Wire.end();
   delay(50);
   Wire.begin();
   delay(50);
-  
+
   if (!mpr121.begin(MPR121_ADDRESS)) {
-    lastTouchError = "MPR121 reinit failed (attempt " + String(reinitializationAttempts) + ")";
+    lastTouchError = "MPR121 reinit failed";
     return;
   }
-  
+
   // Reinit successful - restore settings
   mpr121.setThresholds(touchThreshold, releaseThreshold);
   configureAutoCalibration();
-  
-  // Clear error only if we were successful
+
   touchErrorOccurred = false;
-  lastTouchError = "Recovered from error after " + String(reinitializationAttempts) + " attempts";
+  reinitializationAttempts = 0;
+  lastTouchError = "Recovered from error";
 }
 
 String getLastTouchError() {

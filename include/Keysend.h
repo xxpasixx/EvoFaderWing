@@ -8,5 +8,6 @@
 void initKeyboard();
 void sendKeyPress(const String& keyID);
 void sendKeyRelease(const String& keyID);
+void releaseAllKeys();
 
 #endif

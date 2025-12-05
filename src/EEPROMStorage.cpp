@@ -7,6 +7,7 @@
 #include "FaderControl.h"
 #include "NetworkOSC.h"
 #include "NeoPixelControl.h"
+#include "KeyLedControl.h"
 
 //================================
 // CALIBRATION FUNCTIONS
@@ -64,6 +65,18 @@ void loadConfig() {
   if (EEPROM.read(EEPROM_CONFIG_SIGNATURE_ADDR) == FADERCFG_EEPROM_SIGNATURE) {
     // Load configuration
     EEPROM.get(EEPROM_CONFIG_DATA_ADDR, Fconfig);
+    // Normalize booleans in case of stale/garbage values
+    Fconfig.serialDebug = Fconfig.serialDebug ? true : false;
+    Fconfig.sendKeystrokes = Fconfig.sendKeystrokes ? true : false;
+    Fconfig.useLevelPixels = Fconfig.useLevelPixels ? true : false;
+    // Clamp slow/fast zones to sane OSC range and ordering
+    if (Fconfig.slowZone > 100) Fconfig.slowZone = 100;
+    if (Fconfig.fastZone > 100) Fconfig.fastZone = 100;
+    if (Fconfig.fastZone <= Fconfig.slowZone) {
+      // reset to defaults if inverted or identical
+      Fconfig.slowZone = SLOW_ZONE;
+      Fconfig.fastZone = FAST_ZONE;
+    }
     debugPrint("Fader configuration loaded from EEPROM.");
   } else {
     debugPrint("No valid fader configuration in EEPROM, using defaults.");
@@ -192,6 +205,13 @@ void loadTouchConfig() {
     // Load configuration
     EEPROM.get(EEPROM_TOUCH_DATA_ADDR, touchConfig);
     
+    // Clamp to valid range in case older values were stored
+    if (touchConfig.autoCalibrationMode < 0) {
+      touchConfig.autoCalibrationMode = 0;
+    } else if (touchConfig.autoCalibrationMode > 1) {
+      touchConfig.autoCalibrationMode = 1;
+    }
+    
     // Apply loaded values to the global variables
     autoCalibrationMode = touchConfig.autoCalibrationMode;
     touchThreshold = touchConfig.touchThreshold;
@@ -207,6 +227,39 @@ void loadTouchConfig() {
 }
 
 //================================
+// EXECUTOR CONFIG FUNCTIONS
+//================================
+
+void saveExecConfig() {
+  EEPROM.write(EEPROM_EXEC_SIGNATURE_ADDR, EXECCFG_EEPROM_SIGNATURE);
+  EEPROM.put(EEPROM_EXEC_DATA_ADDR, execConfig);
+  debugPrint("Executor LED configuration saved to EEPROM.");
+}
+
+bool loadExecConfig() {
+  if (EEPROM.read(EEPROM_EXEC_SIGNATURE_ADDR) != EXECCFG_EEPROM_SIGNATURE) {
+    debugPrint("No valid executor LED configuration in EEPROM, using defaults.");
+    return false;
+  }
+
+  EEPROM.get(EEPROM_EXEC_DATA_ADDR, execConfig);
+
+  // Normalize data and clear reserved bytes
+  execConfig.baseBrightness = constrain(execConfig.baseBrightness, 0, 255);
+  execConfig.activeBrightness = constrain(execConfig.activeBrightness, 0, 255);
+  execConfig.useStaticColor = execConfig.useStaticColor ? true : false;
+  execConfig.staticRed = constrain(execConfig.staticRed, 0, 255);
+  execConfig.staticGreen = constrain(execConfig.staticGreen, 0, 255);
+  execConfig.staticBlue = constrain(execConfig.staticBlue, 0, 255);
+  execConfig.reserved[0] = 0;
+  execConfig.reserved[1] = 0;
+
+  markKeyLedsDirty();
+  debugPrint("Executor LED configuration loaded from EEPROM.");
+  return true;
+}
+
+//================================
 // COMBINED CONFIGURATION FUNCTIONS
 //================================
 
@@ -215,6 +268,7 @@ void loadAllConfig() {
   loadConfig();          // Load fader configuration
   loadNetworkConfig();   // Load network configuration
   loadTouchConfig();     // Load touch sensor configuration
+  loadExecConfig();      // Load executor LED configuration
   loadCalibration();
 }
 
@@ -223,6 +277,7 @@ void saveAllConfig() {
   saveFaderConfig();     // Save fader configuration
   saveNetworkConfig();   // Save network configuration
   saveTouchConfig();     // Save touch sensor configuration
+  saveExecConfig();      // Save executor LED configuration
   saveCalibration();
 }
 
@@ -233,27 +288,55 @@ void saveAllConfig() {
 void resetToDefaults() {
   // Reset config to defaults using the macro values
   Fconfig.minPwm = MIN_PWM;
-  Fconfig.defaultPwm = DEFAULT_PWM;
+  Fconfig.maxPwm = MAX_PWM;
   Fconfig.calibratePwm = CALIB_PWM;
   Fconfig.targetTolerance = TARGET_TOLERANCE;
   Fconfig.sendTolerance = SEND_TOLERANCE;
+  Fconfig.slowZone = SLOW_ZONE;
+  Fconfig.fastZone = FAST_ZONE;
   Fconfig.baseBrightness = 5;
   Fconfig.touchedBrightness = 40;
-  Fconfig.fadeTime = 1000;
+  Fconfig.fadeTime = 500;
   Fconfig.serialDebug = false;
+  Fconfig.sendKeystrokes = false;
+  Fconfig.useLevelPixels = false;
+
+  // Reset executor LED settings
+  execConfig.baseBrightness = EXECUTOR_BASE_BRIGHTNESS;
+  execConfig.activeBrightness = EXECUTOR_ACTIVE_BRIGHTNESS;
+  execConfig.useStaticColor = false;
+  execConfig.staticRed = 255;
+  execConfig.staticGreen = 255;
+  execConfig.staticBlue = 255;
+  execConfig.reserved[0] = 0;
+  execConfig.reserved[1] = 0;
+
+  
+  // Reset network settings to defaults
+  netConfig.useDHCP = true;
+  netConfig.staticIP = IPAddress(192, 168, 0, 169);
+  netConfig.gateway = IPAddress(192, 168, 0, 1);
+  netConfig.subnet = IPAddress(255, 255, 255, 0);
+  netConfig.sendToIP = IPAddress(192, 168, 0, 10);
+  netConfig.receivePort = 8000;
+  netConfig.sendPort = 9000;
 
   
   // Reset touch settings
-  autoCalibrationMode = 2;
+  autoCalibrationMode = 1;
   touchThreshold = 12;
   releaseThreshold = 6;
   
   setAutoTouchCalibration(autoCalibrationMode);
   manualTouchCalibration();
   
+  // Keep runtime debug flag in sync with defaults
+  debugMode = Fconfig.serialDebug;
+  
   // Save all defaults to EEPROM
   saveAllConfig();
-  
+
+  markKeyLedsDirty();
   debugPrint("All settings reset to defaults");
 }
 
@@ -318,10 +401,12 @@ void dumpEepromConfig() {
     EEPROM.get(EEPROM_CONFIG_DATA_ADDR, storedConfig);
     
     debugPrintf("Min PWM: %d\n", storedConfig.minPwm);
-    debugPrintf("Default PWM: %d\n", storedConfig.defaultPwm);
+    debugPrintf("Default PWM: %d\n", storedConfig.maxPwm);
     debugPrintf("Calibration PWM: %d\n", storedConfig.calibratePwm);
     debugPrintf("Target Tolerance: %d\n", storedConfig.targetTolerance);
     debugPrintf("Send Tolerance: %d\n", storedConfig.sendTolerance);
+    debugPrintf("Slow Zone: %d\n", storedConfig.slowZone);
+    debugPrintf("Fast Zone: %d\n", storedConfig.fastZone);
     debugPrintf("Base Brightness: %d\n", storedConfig.baseBrightness);
     debugPrintf("Touched Brightness: %d\n", storedConfig.touchedBrightness);
     debugPrintf("Fade Time (ms): %d\n", storedConfig.fadeTime);
@@ -380,7 +465,23 @@ void dumpEepromConfig() {
     debugPrintf("Touch config not found (signature=0x%02X, expected=0x%02X)\n",
                EEPROM.read(EEPROM_TOUCH_SIGNATURE_ADDR), TOUCHCFG_EEPROM_SIGNATURE);
   }
-  
+
+  // Check executor LED configuration
+  debugPrint("\n--- Executor LED Configuration ---");
+  if (EEPROM.read(EEPROM_EXEC_SIGNATURE_ADDR) == EXECCFG_EEPROM_SIGNATURE) {
+    debugPrint("Executor configuration is valid");
+
+    ExecConfig storedExec;
+    EEPROM.get(EEPROM_EXEC_DATA_ADDR, storedExec);
+
+    debugPrintf("Base Brightness: %d\n", storedExec.baseBrightness);
+    debugPrintf("Active Brightness: %d\n", storedExec.activeBrightness);
+    debugPrintf("Use Static Color: %s\n", storedExec.useStaticColor ? "Yes" : "No");
+    debugPrintf("Static Color: R%d G%d B%d\n", storedExec.staticRed, storedExec.staticGreen, storedExec.staticBlue);
+  } else {
+    debugPrintf("Executor config not found (signature=0x%02X, expected=0x%02X)\n",
+               EEPROM.read(EEPROM_EXEC_SIGNATURE_ADDR), EXECCFG_EEPROM_SIGNATURE);
+  }
 
   
   debugPrint("\n===== END OF EEPROM DUMP =====\n");
