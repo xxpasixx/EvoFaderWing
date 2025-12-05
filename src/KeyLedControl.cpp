@@ -10,17 +10,19 @@ Adafruit_NeoPixel keyPixels(EXECUTOR_LED_COUNT, EXECUTOR_LED_PIN, NEO_RGB + NEO_
 
 static bool keyLedsDirty = false;
 
-// Physical strip order for the mounted keys (serpentine):
+// Physical strip order for the exec keys (serpentine):
 // 401-410, 310-301, 201-210, 110-101
-static const uint8_t EXEC_LED_MAP[NUM_EXECUTORS_TRACKED] = {
+// Map to absolute start pixel indices so gaps can be ignored by
+// editing the start values directly (EXECUTOR_LED_COUNT must be total including gap pixels).
+static const uint16_t EXEC_LED_START[NUM_EXECUTORS_TRACKED] = {
   // 101-110 (bottom row, reversed)
-  39, 38, 37, 36, 35, 34, 33, 32, 31, 30,
+  78, 76, 74, 72, 70, 68, 66, 64, 62, 60,
   // 201-210
-  20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+  40, 42, 44, 46, 48, 50, 52, 54, 56, 58,
   // 301-310 (reversed)
-  19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+  38, 36, 34, 32, 30, 28, 26, 24, 22, 20,
   // 401-410 (top row)
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+  0, 2, 4, 6, 8, 10, 12, 14, 16, 18
 };
 
 static uint32_t buildExecColor(int execIndex, uint8_t brightness) {
@@ -56,7 +58,10 @@ static void fillExecutorPixels(int execIndex, uint8_t brightness) {
   }
 
   uint32_t color = buildExecColor(execIndex, brightness);
-  int startPixel = EXEC_LED_MAP[execIndex] * EXECUTOR_PIXELS_PER_KEY;
+  int startPixel = EXEC_LED_START[execIndex];
+  if (startPixel < 0 || startPixel + EXECUTOR_PIXELS_PER_KEY > EXECUTOR_LED_COUNT) {
+    return;
+  }
 
   for (int i = 0; i < EXECUTOR_PIXELS_PER_KEY; ++i) {
     keyPixels.setPixelColor(startPixel + i, color);
