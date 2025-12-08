@@ -44,7 +44,7 @@
 // Executor key NeoPixel strip (40 keys, 2 pixels each)
 #define NUM_EXECUTORS_TRACKED 40
 #define EXECUTOR_PIXELS_PER_KEY 2
-#define EXECUTOR_LED_PIN 52   // Teensy 4.1 pin for the key strip
+#define EXECUTOR_LED_PIN 53   // Teensy 4.1 pin for the key strip
 #define EXECUTOR_LED_COUNT (NUM_EXECUTORS_TRACKED * EXECUTOR_PIXELS_PER_KEY)
 #define EXECUTOR_BASE_BRIGHTNESS 10   // Default base brightness for populated-but-off keys
 #define EXECUTOR_ACTIVE_BRIGHTNESS 80 // Default brightness for active/on keys (unpopulated stays dark)
