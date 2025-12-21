@@ -46,7 +46,7 @@ void setup() {
   initializeFaders();
   configureFaderPins();
   
-  // Initialize Touch MPR121 
+  // Initialize touch sensor (MPR121 or MTCH2120)
   if (!setupTouch()) {
     debugPrint("Touch sensor init failed!");
   }
@@ -62,6 +62,8 @@ void setup() {
   loadAllConfig();
 
   moveAllFadersToSetpoints();
+  // Calibrate touch sensor after faders are parked at center setpoint
+  manualTouchCalibration();
 
   //Setup I2C Slaves so we can also check for network reset
   setupI2cPolling();

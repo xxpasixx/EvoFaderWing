@@ -50,8 +50,22 @@
 #define EXECUTOR_ACTIVE_BRIGHTNESS 80 // Default brightness for active/on keys (unpopulated stays dark)
 
 // Touch sensor configuration
-#define IRQ_PIN 13
+#if defined(TOUCH_SENSOR_MTCH2120) && defined(TOUCH_SENSOR_MPR121)
+#error "Select only one touch sensor: TOUCH_SENSOR_MTCH2120 or TOUCH_SENSOR_MPR121"
+#endif
+
+// Default to MPR121 unless overridden in platformio.ini
+#if !defined(TOUCH_SENSOR_MTCH2120) && !defined(TOUCH_SENSOR_MPR121)
+#define TOUCH_SENSOR_MPR121 1
+#endif
+
+#define IRQ_PIN 41
+#ifndef MPR121_ADDRESS
 #define MPR121_ADDRESS 0x5A
+#endif
+#ifndef MTCH2120_ADDRESS
+#define MTCH2120_ADDRESS 0x20
+#endif
 
 //================================
 // PIN ASSIGNMENTS

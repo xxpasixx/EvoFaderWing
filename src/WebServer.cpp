@@ -736,10 +736,15 @@ void handleTouchSettings(String request) {
   
   if (releaseThresholdStr.length() > 0) {
     int threshold = releaseThresholdStr.toInt();
+#if defined(TOUCH_SENSOR_MTCH2120)
+    releaseThreshold = constrainParam(threshold, 0, 7, releaseThreshold); // HYS code 0-7
+#else
     releaseThreshold = constrainParam(threshold, 1, 255, releaseThreshold);
+#endif
   }
   
-  // Additional logical validation - ensure release < touch
+#if defined(TOUCH_SENSOR_MPR121)
+  // Additional logical validation - ensure release < touch for MPR121 semantics
   if (releaseThreshold >= touchThreshold) {
     debugPrint("Warning: Release threshold >= touch threshold, adjusting");
     releaseThreshold = touchThreshold - 1;
@@ -748,6 +753,7 @@ void handleTouchSettings(String request) {
       touchThreshold = 2;
     }
   }
+#endif
   
   // Apply the settings to the touch sensor
   setAutoTouchCalibration(autoCalibrationMode);
@@ -758,7 +764,7 @@ void handleTouchSettings(String request) {
   // Save to EEPROM
   saveTouchConfig();
   
-  // Reset MPR121
+  // Reset touch controller with new settings
   setupTouch();
   
   sendMessagePage("Touch Settings Saved", "Touch settings have been saved successfully.", "/fader_settings", 3);
@@ -1141,15 +1147,37 @@ void handleFaderSettingsPage() {
     "<div class='divider'></div>"
     "<form method='get' action='/save'><h3 style='margin: 0 0 10px;'>Touch Sensor</h3>"));
 
+#if defined(TOUCH_SENSOR_MTCH2120)
+  client.print(F("<div class='form-group'><label>Auto Calibration (AutoTune)</label><select name='autoCalMode'>"
+    "<option value='0'"));
+#else
   client.print(F("<div class='form-group'><label>Auto Calibration</label><select name='autoCalMode'>"
     "<option value='0'"));
+#endif
   if (autoCalibrationMode == 0) client.print(F(" selected"));
-  client.print(F(">Disabled (Autoconfig off)</option><option value='1'"));
+  client.print(F(">Disabled"));
+#if defined(TOUCH_SENSOR_MTCH2120)
+  client.print(F("</option><option value='1'"));
+  if (autoCalibrationMode == 1) client.print(F(" selected"));
+  client.println(F(">Enabled</option></select><p class='help-text'>MTCH2120 AutoTune baseline tracking. Leave enabled unless troubleshooting.</p></div>"));
+#else
+  client.print(F(" (Autoconfig off)</option><option value='1'"));
   if (autoCalibrationMode == 1) client.print(F(" selected"));
   client.println(F(">Enabled (Adafruit autoconfig)</option></select><p class='help-text'>Toggles the built-in autoconfig for baselines. Disabled leaves power-up defaults (NOT RECOMENDED).</p></div>"));
+#endif
 
   client.print(F("<div class='form-group'><label>Touch Threshold</label><input type='number' name='touchThreshold' value='"));
   client.print(touchThreshold);
+#if defined(TOUCH_SENSOR_MTCH2120)
+  client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive (MTCH2120 default: 128)</p></div>"));
+
+  client.print(F("<div class='form-group'><label>Hysteresis</label><input type='number' name='releaseThreshold' value='"));
+  client.print(releaseThreshold);
+  client.println(F("' min='0' max='7'><p class='help-text'>MTCH2120 HYS code (0-7). 1 = ~25% (default), higher = stickier releases.</p></div>"
+    "<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>"
+    "<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>"
+    "</form></div></div>"));
+#else
   client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive (default: 12)</p></div>"));
 
   client.print(F("<div class='form-group'><label>Release Threshold</label><input type='number' name='releaseThreshold' value='"));
@@ -1158,6 +1186,7 @@ void handleFaderSettingsPage() {
     "<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>"
     "<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>"
     "</form></div></div>"));
+#endif
 
   waitForWriteSpace(800);
   client.println(F("</div>")); // container
