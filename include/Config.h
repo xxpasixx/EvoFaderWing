@@ -20,6 +20,7 @@
 #define MIN_PWM         40       // Minimum PWM to overcome motor inertia 
 #define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
 #define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
+#define FADER_MAX_FAILURES       2     // Consecutive timeouts before disabling a fader motor
 
 // Fader position tolerances
 #define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
@@ -59,7 +60,11 @@
 #define TOUCH_SENSOR_MPR121 1
 #endif
 
-#define IRQ_PIN 13
+#if defined(TOUCH_SENSOR_MPR121)
+#define IRQ_PIN 13   // MPR121 uses pin 13 for IRQ, leaving pin 41 free for dir
+#elif defined(TOUCH_SENSOR_MTCH2120)
+#define IRQ_PIN 41   // MTCH2120 uses pin 41 for IRQ, leaving pin 13 free for dir
+#endif
 #ifndef MPR121_ADDRESS
 #define MPR121_ADDRESS 0x5A
 #endif
@@ -160,6 +165,9 @@ struct Fader {
   int maxVal;               // Calibrated analog max
 
   uint8_t setpoint;          // Target position
+  bool motorEnabled;        // Motor is enabled unless a fault disables it
+  uint8_t failureCount;     // Consecutive movement failures
+  unsigned long lastFailureTime; // When the last movement failure was recorded
 
   uint8_t lastReportedValue;    // Last value printed or sent
   uint8_t lastSentOscValue;     // Last value sent via OSC

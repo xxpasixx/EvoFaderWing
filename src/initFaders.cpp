@@ -22,6 +22,9 @@ void initializeFaders() {
     faders[i].minVal = 10;    // Keep default range small to avoid not being able to hit 0 and 100 percent
     faders[i].maxVal = 245;  // we might lose a little precision but its better
     faders[i].setpoint = 0;
+    faders[i].motorEnabled = true;
+    faders[i].failureCount = 0;
+    faders[i].lastFailureTime = 0;
     faders[i].lastReportedValue = -1;
     faders[i].lastOscSendTime = 0;
     faders[i].oscID = OSC_IDS[i];
