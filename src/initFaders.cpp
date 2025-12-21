@@ -85,6 +85,13 @@ void configureFaderPins() {
 void calibrateFaders() {
   debugPrintf("Calibration started at PWM: %d\n", Fconfig.calibratePwm);
   calibrationInProgress = true;
+
+  // Re-enable any faders that were previously disabled due to movement failures
+  for (int i = 0; i < NUM_FADERS; i++) {
+    faders[i].motorEnabled = true;
+    faders[i].failureCount = 0;
+    faders[i].lastFailureTime = 0;
+  }
   
   // Store original colors before calibration
   uint8_t originalColors[NUM_FADERS][3];
