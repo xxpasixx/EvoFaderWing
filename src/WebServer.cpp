@@ -1144,6 +1144,7 @@ void handleFaderSettingsPage() {
   client.println(F(
     "' min='0' max='255'><p class='help-text'>Motor speed during calibration (lower = gentler)</p></div><button type='submit' class='btn btn-success btn-block'>Save Calibration Speed</button></form>"
     "<form method='post' action='/calibrate'><input type='hidden' name='calibrate' value='1'><button type='submit' class='btn btn-info btn-block'>Run Fader Calibration</button></form>"
+    "<p class='help-text'>Calibration also clears any disabled fader motors.</p>"
     "<div class='divider'></div>"
     "<form method='get' action='/save'><h3 style='margin: 0 0 10px;'>Touch Sensor</h3>"));
 
