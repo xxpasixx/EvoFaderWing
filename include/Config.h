@@ -20,7 +20,7 @@
 #define MIN_PWM         40       // Minimum PWM to overcome motor inertia 
 #define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
 #define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
-#define FADER_MAX_FAILURES       2     // Consecutive timeouts before disabling a fader motor
+#define FADER_MAX_FAILURES       3     // Consecutive timeouts before disabling a fader motor
 
 // Fader position tolerances
 #define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
