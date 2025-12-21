@@ -102,6 +102,9 @@ void loop() {
   // Handle I2C Polling for encoders keypresses and encoder key press
   handleI2c();
 
+  // Process queued OSC packets from UDP callback
+  processOscQueue();
+  
     
   // Process touch changes 
   if (processTouchChanges()) {

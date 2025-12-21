@@ -25,6 +25,7 @@ extern AsyncUDP oscUdp;
 // Network setup and management
 void setupNetwork();
 void restartUDP();
+void processOscQueue();  // Process queued OSC packets (call from loop)
 
 
 
