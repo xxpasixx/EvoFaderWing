@@ -59,7 +59,7 @@
 #define TOUCH_SENSOR_MPR121 1
 #endif
 
-#define IRQ_PIN 41
+#define IRQ_PIN 13
 #ifndef MPR121_ADDRESS
 #define MPR121_ADDRESS 0x5A
 #endif
