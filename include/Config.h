@@ -9,7 +9,7 @@
 // IDENTITY
 //================================
 #define PROJECT_NAME "EvoFaderWing"
-#define SW_VERSION      "0.3"
+#define SW_VERSION      "0.3.1"
 
 //================================
 // HARDWARE CONFIGURATION
