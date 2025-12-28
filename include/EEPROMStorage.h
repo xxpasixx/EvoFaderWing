@@ -16,7 +16,7 @@
 #define CALCFG_EEPROM_SIGNATURE 0xA4    // Signature for fader calibration
 #define FADERCFG_EEPROM_SIGNATURE 0xB7    // Signature for fader configuration
 #define NETCFG_EEPROM_SIGNATURE 0x5B    // Signature for network config
-#define TOUCHCFG_EEPROM_SIGNATURE 0xC7     // Signature for touch sensor configuration
+#define TOUCHCFG_EEPROM_SIGNATURE 0xC6     // Signature for touch sensor configuration
 #define EXECCFG_EEPROM_SIGNATURE 0xD6     // Signature for executor LED configuration
 
 // EEPROM address map with defined layout to ensure organized storage

@@ -2,13 +2,15 @@
 
 #include "TouchSensor.h"
 #include "Utils.h"
+#include "i2cPolling.h"
 
 //================================
 // COMMON GLOBALS
 //================================
 
-bool touchDebug = false;
+bool touchDebug = true;
 unsigned long touchDebugIntervalMs = 500;  // Minimum time between debug prints
+bool irqDebugOnly = true;  // When true, only print touch debug on IRQ-triggered reads
 unsigned long lastTouchDebugTime = 0;
 
 volatile bool touchStateChanged = false;
@@ -20,6 +22,7 @@ const int MAX_REINIT_ATTEMPTS = 5;
 const unsigned long REINIT_DELAY_BASE = 1000;  // 1 second base delay
 
 bool touchConfirmed[NUM_FADERS] = {false};
+
 
 //================================
 // INTERRUPT HANDLER
@@ -66,9 +69,6 @@ static constexpr uint16_t DEFAULT_DEVICE_CONTROL =
 MTCH2120 touchSensor(Wire, MTCH2120_ADDRESS, IRQ_PIN);
 
 static unsigned long lastTouchPollTime = 0;
-static bool irqDebugOnly = false;  // When true, only print touch debug on IRQ-triggered reads
-static constexpr unsigned long TOUCH_RELEASE_POLL_MS = 250;    // Poll even without IRQ to catch releases / clear stuck IRQ
-static constexpr unsigned long TOUCH_RELEASE_DEBOUNCE_MS = 50;
 static unsigned long releaseDebounceStart[NUM_FADERS] = {0};
 static bool releaseDebounceActive[NUM_FADERS] = {false};
 
@@ -162,9 +162,17 @@ void updateTouchTiming(int i, bool newTouchState) {
     faders[i].touchDuration = 0;
   } else if (!newTouchState && faders[i].touched) {
     faders[i].releaseTime = currentTime;
-    faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    faders[i].touchDuration = (currentTime >= faders[i].touchStartTime)
+                                  ? (currentTime - faders[i].touchStartTime)
+                                  : 0;
   } else if (newTouchState && faders[i].touched) {
-    faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    // Guard against millis wrap or stale start times
+    if (currentTime >= faders[i].touchStartTime) {
+      faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    } else {
+      faders[i].touchStartTime = currentTime;
+      faders[i].touchDuration = 0;
+    }
   }
 
   faders[i].touched = newTouchState;
@@ -237,15 +245,16 @@ static void printFaderTouchStatesInternal(unsigned long now, bool wasIrq) {
 bool processTouchChanges() {
   const unsigned long now = millis();
   bool due = touchStateChanged;
-  if (TOUCH_RELEASE_POLL_MS > 0) {
+  if (TOUCH_BACKUP_POLL_MS > 0) {
     // Periodic poll: normal release path and safety net for missed IRQ
-    due = due || (now - lastTouchPollTime >= TOUCH_RELEASE_POLL_MS);
+    due = due || (now - lastTouchPollTime >= TOUCH_BACKUP_POLL_MS);
   }
   if (!due) {
     return false;
   }
 
   bool wasIrq = touchStateChanged;
+
   touchStateChanged = false;
   lastTouchPollTime = now;
 
@@ -270,14 +279,16 @@ bool processTouchChanges() {
         stateUpdated = true;
       }
       // While held, update duration
-      faders[i].touchDuration = now - faders[i].touchStartTime;
+      faders[i].touchDuration = (now >= faders[i].touchStartTime)
+                                    ? (now - faders[i].touchStartTime)
+                                    : 0;
     } else {
-      // Debounce release: require stable "not touched" for TOUCH_RELEASE_DEBOUNCE_MS
+    // Debounce release: require stable "not touched" for RELEASE_DEBOUNCE_MS
       if (touchConfirmed[i]) {
         if (!releaseDebounceActive[i]) {
           releaseDebounceActive[i] = true;
           releaseDebounceStart[i] = now;
-        } else if (now - releaseDebounceStart[i] >= TOUCH_RELEASE_DEBOUNCE_MS) {
+        } else if (now - releaseDebounceStart[i] >= RELEASE_DEBOUNCE_MS) {
           releaseDebounceActive[i] = false;
           touchConfirmed[i] = false;
           updateTouchTiming(i, false);
@@ -298,7 +309,7 @@ bool processTouchChanges() {
 // CALIBRATION FUNCTIONS
 //================================
 
-static void runTouchCalibration() {
+void runTouchCalibration() {
   touchSensor.setEasyTune(true);  // Optional EasyTune pulse before calibration
 
   if (!applyMtchDefaults()) {
@@ -350,11 +361,8 @@ void configureAutoCalibration() {
 
 void handleTouchError() {
   touchErrorOccurred = true;
-  // Always attempt immediate reinit; no backoff/limits
-  Wire.end();
-  delay(50);
-  Wire.begin();
-  delay(50);
+  // Always attempt immediate reinit; keep existing I2C reset behavior
+  resetI2CBus();
 
   if (!touchSensor.begin()) {
     lastTouchError = "MTCH2120 reinit failed";
@@ -400,8 +408,9 @@ void printFaderTouchStates() {
 // MPR121 sensor object
 Adafruit_MPR121 mpr121 = Adafruit_MPR121();
 
-// Debounce arrays
-unsigned long debounceStart[NUM_FADERS] = {0};
+static unsigned long lastTouchPollTime = 0;
+static unsigned long releaseDebounceStart[NUM_FADERS] = {0};
+static bool releaseDebounceActive[NUM_FADERS] = {false};
 
 // Used for debug and touch timing
 void updateTouchTiming(int i, bool newTouchState) {
@@ -416,11 +425,18 @@ void updateTouchTiming(int i, bool newTouchState) {
   else if (!newTouchState && faders[i].touched) {
     faders[i].releaseTime = currentTime;
     // Calculate how long it was touched
-    faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    faders[i].touchDuration = (currentTime >= faders[i].touchStartTime)
+                                  ? (currentTime - faders[i].touchStartTime)
+                                  : 0;
   }
   // If continuing to be touched, update duration
   else if (newTouchState && faders[i].touched) {
-    faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    if (currentTime >= faders[i].touchStartTime) {
+      faders[i].touchDuration = currentTime - faders[i].touchStartTime;
+    } else {
+      faders[i].touchStartTime = currentTime;
+      faders[i].touchDuration = 0;
+    }
   }
   
   faders[i].touched = newTouchState;
@@ -434,8 +450,8 @@ bool setupTouch() {
   // Configure IRQ pin as input with internal pullup resistor
   pinMode(IRQ_PIN, INPUT_PULLUP);
   
-  // Start I2C communication
-  Wire.begin();
+  // Start I2C communication using the shared bus settings
+  resetI2CBus();
   
   // Try to initialize the MPR121 sensor
   if (!mpr121.begin(MPR121_ADDRESS)) {
@@ -452,7 +468,8 @@ bool setupTouch() {
   
   // Initialize debounce and state arrays
   for (int i = 0; i < NUM_FADERS; i++) {
-    debounceStart[i] = 0;
+    releaseDebounceStart[i] = 0;
+    releaseDebounceActive[i] = false;
     touchConfirmed[i] = false;
   }
   
@@ -468,18 +485,34 @@ bool setupTouch() {
 //================================
 
 bool processTouchChanges() {
-  uint16_t currentTouches = mpr121.touched();
   unsigned long now = millis();
+  bool due = touchStateChanged;
+  if (TOUCH_BACKUP_POLL_MS > 0) {
+    due = due || (now - lastTouchPollTime >= TOUCH_BACKUP_POLL_MS);
+  }
+  if (!due) {
+    return false;
+  }
+
+  bool wasIrq = touchStateChanged;
+  touchStateChanged = false;
+  lastTouchPollTime = now;
+
+  uint16_t currentTouches = mpr121.touched();
   bool stateUpdated = false;
 
-  if (touchDebug && now - lastTouchDebugTime >= touchDebugIntervalMs) {
-    lastTouchDebugTime = now;
-    debugPrint("Raw Touch Values:");
-    for (int j = 0; j < NUM_FADERS; j++) {
-      uint16_t baseline = mpr121.baselineData(j);
-      uint16_t filtered = mpr121.filteredData(j);
-      int16_t delta = baseline - filtered;
-      debugPrintf("Fader %d - Base: %u, Filtered: %u, Delta: %d", j, baseline, filtered, delta);
+  if (touchDebug) {
+    const bool intervalHit = (now - lastTouchDebugTime >= touchDebugIntervalMs);
+    const bool shouldDebug = (wasIrq || intervalHit) && (!irqDebugOnly || wasIrq);
+    if (shouldDebug) {
+      lastTouchDebugTime = now;
+      debugPrint("Raw Touch Values:");
+      for (int j = 0; j < NUM_FADERS; j++) {
+        uint16_t baseline = mpr121.baselineData(j);
+        uint16_t filtered = mpr121.filteredData(j);
+        int16_t delta = baseline - filtered;
+        debugPrintf("Fader %d - Base: %u, Filtered: %u, Delta: %d", j, baseline, filtered, delta);
+      }
     }
   }
 
@@ -491,45 +524,34 @@ bool processTouchChanges() {
   for (int i = 0; i < NUM_FADERS; i++) {
     bool rawTouch = bitRead(currentTouches, i);
 
-    // === TOUCH DETECTED ===
-    if (rawTouch && !touchConfirmed[i]) {
-      // Start debounce timer if just now touched
-      if (debounceStart[i] == 0) {
-        debounceStart[i] = now;
-      }
-      // Confirm after debounce time
-      else if (now - debounceStart[i] >= TOUCH_CONFIRM_MS) {
+    if (rawTouch) {
+      releaseDebounceActive[i] = false;
+      if (!touchConfirmed[i]) {
         touchConfirmed[i] = true;
-        debounceStart[i] = 0;
         updateTouchTiming(i, true);
         stateUpdated = true;
       }
-    }
-
-    // === RELEASE DETECTED ===
-    else if (!rawTouch && touchConfirmed[i]) {
-      // Start debounce timer if just now released
-      if (debounceStart[i] == 0) {
-        debounceStart[i] = now;
+      if (touchConfirmed[i]) {
+        faders[i].touchDuration = (now >= faders[i].touchStartTime)
+                                      ? (now - faders[i].touchStartTime)
+                                      : 0;
       }
-      // Confirm release after debounce time
-      else if (now - debounceStart[i] >= RELEASE_CONFIRM_MS) {
-        touchConfirmed[i] = false;
-        debounceStart[i] = 0;
-        updateTouchTiming(i, false);
-        stateUpdated = true;
+    } else {
+      if (touchConfirmed[i]) {
+        if (!releaseDebounceActive[i]) {
+          releaseDebounceActive[i] = true;
+          releaseDebounceStart[i] = now;
+        } else if (now - releaseDebounceStart[i] >= RELEASE_DEBOUNCE_MS) {
+          releaseDebounceActive[i] = false;
+          touchConfirmed[i] = false;
+          updateTouchTiming(i, false);
+          stateUpdated = true;
+        }
+      } else {
+        releaseDebounceActive[i] = false;
       }
     }
 
-    // === NO CHANGE ===
-    else {
-      debounceStart[i] = 0;  // Reset if bouncing
-    }
-
-    // While held, update duration
-    if (touchConfirmed[i]) {
-      faders[i].touchDuration = now - faders[i].touchStartTime;
-    }
   }
 
   return stateUpdated;
@@ -552,11 +574,17 @@ static void applyAutoconfig(bool enable) {
   }
 }
 
+static void recalibrateBaselines();
+
 void manualTouchCalibration() {
   recalibrateBaselines();
 }
 
-void recalibrateBaselines() {
+void runTouchCalibration() {
+  recalibrateBaselines();
+}
+
+static void recalibrateBaselines() {
   configureAutoCalibration();
   mpr121.setThresholds(touchThreshold, releaseThreshold);
 }
@@ -594,11 +622,8 @@ void configureAutoCalibration() {
 
 void handleTouchError() {
   touchErrorOccurred = true;
-  // Always attempt immediate reinit; no backoff/limits
-  Wire.end();
-  delay(50);
-  Wire.begin();
-  delay(50);
+  // Always attempt immediate reinit; keep existing I2C reset behavior
+  resetI2CBus();
 
   if (!mpr121.begin(MPR121_ADDRESS)) {
     lastTouchError = "MPR121 reinit failed";

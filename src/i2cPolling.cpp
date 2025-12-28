@@ -14,7 +14,7 @@
 
 // There are a lot of safeguards here to handle noisy i2c lines so even the most EMI unfriendly build should behave well
 
-bool i2cDebug = true;
+bool i2cDebug = false;
 bool i2cErrorDebug = true;
 
 // Local helpers to gate all I2C logging behind i2cDebug
@@ -73,12 +73,12 @@ static int i2cErrorStreak = 0;
 static uint8_t slaveBackoff[numSlaves] = {0};
 const uint8_t I2C_BACKOFF_CYCLES = 3; // skip a few cycles for a noisy slave
 
-static void resetI2CBus() {
+void resetI2CBus() {
   Wire.end();
-  delayMicroseconds(200);
+  delay(1);                  // brief settle to let ICs reset if called from an error
   Wire.begin();                
-  Wire.setClock(50000);       // 100kHz for stability under load
-  Wire.setTimeout(10);         // Short timeout to avoid bus hangs
+  Wire.setClock(400000);       // 100kHz for stability (400khz is working without any errors)
+  Wire.setTimeout(5);         // Short timeout to avoid bus hangs
 }
 
 // === SETUP FUNCTION ===
@@ -130,8 +130,22 @@ void pollSlave(uint8_t address, int slaveIndex) {
   uint8_t bytesRequested = 16; // Smaller request size
   uint8_t received = Wire.requestFrom(address, bytesRequested);
   
-  // Wait a bit for response
-  delay(1);
+  // Wait a bit for response Added for stability testing no longer needed
+  //delay(1);
+
+  if (received != bytesRequested) {
+    I2C_ERROR_PRINTF("[I2C ERR] short read from 0x%02X: got %d/%d", address, received, bytesRequested);
+    while (Wire.available()) Wire.read();
+    if (slaveIndex >= 0 && slaveIndex < numSlaves) {
+      slaveBackoff[slaveIndex] = I2C_BACKOFF_CYCLES;
+    }
+    if (++i2cErrorStreak >= 3) {
+      I2C_ERROR_PRINTF("[I2C ERR] resetting bus after repeated short reads on 0x%02X", address);
+      i2cErrorStreak = 0;
+      resetI2CBus();
+    }
+    return;
+  }
   
   bool errorFrame = false;
   
@@ -431,27 +445,3 @@ void sendKeyOSC(uint16_t keyNumber, uint8_t state) {
 
 }
 
-
-
-
-
-// === PERFORMANCE MEASUREMENT FUNCTION ===
-// Alternative polling function that measures the time taken to poll all slaves
-// Useful for performance tuning and verifying that polling stays within timing budget
-void measurePollingSpeed() {
-  unsigned long startTime = micros();  // Get high-precision start timestamp
-  
-  // Poll all slaves once, just like the normal polling cycle
-  for (int i = 0; i < numSlaves; i++) {
-    pollSlave(slaveAddresses[i], i);
-  }
-  
-  unsigned long endTime = micros();    // Get high-precision end timestamp
-  unsigned long totalTime = endTime - startTime;  // Calculate elapsed time
-  
-  // Output timing information for performance analysis using project's debug system
-  I2C_DEBUG_PRINTF("[TIMING] Polled %d slaves in %lu microseconds", numSlaves, totalTime);
-  
-  // Note: With 5 slaves at 400kHz I2C, total time should be around 2000-3000 microseconds
-  // This leaves plenty of time in each 1ms polling cycle for other system operations
-}

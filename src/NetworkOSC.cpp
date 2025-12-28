@@ -22,10 +22,10 @@ bool faderColorDebug = false;
 // OSC QUEUE (keeps UDP callback short)
 //================================
 
-static constexpr size_t OSC_MAX_PACKET_SIZE = 1536;     // Max bytes we will accept per packet
+static constexpr size_t OSC_MAX_PACKET_SIZE = 1536;     // Max bytes we will accept per packet (covers worst-case color/int bundles with margin)
 static constexpr size_t OSC_QUEUE_DEPTH = 12;           // Number of packets buffered
 static constexpr uint8_t OSC_MAX_PACKETS_PER_LOOP = 4;  // Process this many packets per loop iteration
-static constexpr uint32_t OSC_PROCESS_BUDGET_US = 8000; // Stop processing if we exceed this budget
+static constexpr uint32_t OSC_PROCESS_BUDGET_US = 8000; // Stop processing if we exceed this budget in micro seconds
 
 struct OscQueueItem {
   uint16_t len;
@@ -95,7 +95,7 @@ static void attachUdpHandler() {
     if (!enqueueOscPacket(data, len)) {
       static uint32_t lastDropPrint = 0;
       const uint32_t now = millis();
-      if (now - lastDropPrint > 500) {
+      if (now - lastDropPrint > 500) { // rate-limit debug spam
         if (len > OSC_MAX_PACKET_SIZE) {
           debugPrintf("[OSC] Drop oversize packet %u bytes (max %u)", len, OSC_MAX_PACKET_SIZE);
         } else {
@@ -191,14 +191,14 @@ static void handleOscPacket(const uint8_t* data, size_t len) {
 // Pull queued packets from the UDP callback and process a few each loop.
 void processOscQueue() {
   uint8_t processed = 0;
-  uint32_t budgetStart = micros();
+  elapsedMicros budget;
   OscQueueItem pkt{};
 
   while (processed < OSC_MAX_PACKETS_PER_LOOP && dequeueOscPacket(pkt)) {
     handleOscPacket(pkt.data, pkt.len);
     processed++;
 
-    if ((micros() - budgetStart) >= OSC_PROCESS_BUDGET_US) {
+    if (budget >= OSC_PROCESS_BUDGET_US) {
       break;
     }
   }

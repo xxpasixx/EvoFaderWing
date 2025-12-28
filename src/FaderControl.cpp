@@ -19,7 +19,7 @@ static bool FaderMoveActive = false;
 
 void driveMotorWithPWM(Fader& f, int direction, int pwmValue) {
   if (!f.motorEnabled) {
-    // Ensure the motor is off if disabled
+    // Keep motor off when disabled
     digitalWrite(f.dirPin1, LOW);
     digitalWrite(f.dirPin2, LOW);
     analogWrite(f.pwmPin, 0);
@@ -115,7 +115,7 @@ void moveAllFadersToSetpoints() {
       Fader& f = faders[i];
 
       if (!f.motorEnabled) {
-        // Treat disabled faders as already at target, but keep motors off
+        // Disabled motors are treated as parked; ensure power is off
         driveMotorWithPWM(f, 0, 0);
         continue;
       }
@@ -153,8 +153,8 @@ void moveAllFadersToSetpoints() {
 
     }
     
-    // Small delay to prevent overwhelming the system
-    delay(1);
+    // Yield to prevent overwhelming the system
+    yield();
     
     // Add timeout protection to prevent infinite loops
 
@@ -203,7 +203,7 @@ void moveAllFadersToSetpoints() {
         pixels.show();
         delay(50);
       }
-
+      
       // Track failures and disable motors that repeatedly time out
       unsigned long failureTime = millis();
       for (int i = 0; i < NUM_FADERS; i++) {
@@ -318,6 +318,17 @@ void handleFaders() {
 // Read fader analog pin and return OSC value (0-100) using fader's calibrated range, with clamping at both ends
 int readFadertoOSC(Fader& f) {
   int analogValue = analogRead(f.analogPin);
+
+  // Suppress tiny jitter in the raw reading to avoid 0/1 flicker in OSC
+  if (f.lastAnalogValue >= 0) {
+    if (abs(analogValue - f.lastAnalogValue) <= ANALOG_NOISE_TOLERANCE) {
+      analogValue = f.lastAnalogValue;
+    } else {
+      f.lastAnalogValue = analogValue;
+    }
+  } else {
+    f.lastAnalogValue = analogValue;
+  }
 
   // Clamp near-bottom analog values to force OSC = 0
   if (analogValue <= f.minVal + 4) {

@@ -26,6 +26,7 @@ void initializeFaders() {
     faders[i].failureCount = 0;
     faders[i].lastFailureTime = 0;
     faders[i].lastReportedValue = -1;
+    faders[i].lastAnalogValue = -1;
     faders[i].lastOscSendTime = 0;
     faders[i].oscID = OSC_IDS[i];
     
@@ -65,6 +66,7 @@ void configureFaderPins() {
   for (int i = 0; i < NUM_FADERS; i++) {
     Fader& f = faders[i];
     pinMode(f.pwmPin, OUTPUT);
+    analogWriteFrequency(f.pwmPin,PWM_FREQ); // Configure PWM frequency for each pin (some pins use the same FlexPWM group, just set them all)
     pinMode(f.dirPin1, OUTPUT);
     pinMode(f.dirPin2, OUTPUT);
   
@@ -145,7 +147,7 @@ void calibrateFaders() {
       delay(10);
       
       pollWebServer();  // Allow web UI to remain responsive
-      yield();          // Let MPR121 and Ethernet process in background
+      yield();          // Let touch sensor and Ethernet process in background
       
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
@@ -187,7 +189,7 @@ void calibrateFaders() {
       delay(10);
 
       pollWebServer();  // Allow web UI to remain responsive
-      yield();          // Let MPR121 and Ethernet process in background
+      yield();          // Let touch sensor and Ethernet process in background
       
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
@@ -220,7 +222,7 @@ void calibrateFaders() {
       }
     }
 
-    bool faderFailed = !maxCalibrationSuccess || !minCalibrationSuccess || !rangeValid;
+    //bool faderFailed = !maxCalibrationSuccess || !minCalibrationSuccess || !rangeValid;
 
     if (maxCalibrationSuccess && minCalibrationSuccess && rangeValid) {
       debugPrintf("→ Calibration Done: Min=%d Max=%d\n", f.minVal, f.maxVal);

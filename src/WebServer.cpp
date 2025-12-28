@@ -708,9 +708,9 @@ void handleRunCalibration() {
   calibrateFaders();
   saveCalibration();
 
-  // Reinitialize MPR121 after calibration due to I2C hang risk
-  debugPrint("Reinitializing touch sensor after calibration...");
-  setupTouch();  // Restore I2C communication and config
+  // Recalibrate touch sensor after motor calibration
+  debugPrint("Recalibrating touch sensor after fader calibration...");
+  runTouchCalibration();
 
   // Inform user and redirect to statistics page
   
@@ -737,7 +737,7 @@ void handleTouchSettings(String request) {
   if (releaseThresholdStr.length() > 0) {
     int threshold = releaseThresholdStr.toInt();
 #if defined(TOUCH_SENSOR_MTCH2120)
-    releaseThreshold = constrainParam(threshold, 0, 7, releaseThreshold); // HYS code 0-7
+    releaseThreshold = constrainParam(threshold, 0, 7, releaseThreshold); // Hysteresis code 0-7
 #else
     releaseThreshold = constrainParam(threshold, 1, 255, releaseThreshold);
 #endif
@@ -763,9 +763,6 @@ void handleTouchSettings(String request) {
   
   // Save to EEPROM
   saveTouchConfig();
-  
-  // Reset touch controller with new settings
-  setupTouch();
   
   sendMessagePage("Touch Settings Saved", "Touch settings have been saved successfully.", "/fader_settings", 3);
 }
@@ -1016,7 +1013,8 @@ void handleStatsData() {
   client.print(F("{\"faders\":["));
   for (int i = 0; i < NUM_FADERS; i++) {
     Fader& f = faders[i];
-    int currentVal = analogRead(f.analogPin);
+    int oscVal = readFadertoOSC(f);
+    int currentVal = (f.lastAnalogValue >= 0) ? f.lastAnalogValue : 0;
 
     if (i > 0) client.print(',');
     client.print(F("{\"id\":"));
@@ -1028,7 +1026,7 @@ void handleStatsData() {
     client.print(F(",\"max\":"));
     client.print(f.maxVal);
     client.print(F(",\"osc\":"));
-    client.print(readFadertoOSC(faders[i]));
+    client.print(oscVal);
     client.print('}');
 
     if (i % 3 == 0) waitForWriteSpace(200);
@@ -1150,44 +1148,45 @@ void handleFaderSettingsPage() {
 
 #if defined(TOUCH_SENSOR_MTCH2120)
   client.print(F("<div class='form-group'><label>Auto Calibration (AutoTune)</label><select name='autoCalMode'>"
-    "<option value='0'"));
 #else
   client.print(F("<div class='form-group'><label>Auto Calibration</label><select name='autoCalMode'>"
+#endif
     "<option value='0'"));
-#endif
   if (autoCalibrationMode == 0) client.print(F(" selected"));
-  client.print(F(">Disabled"));
+  client.print(F(">Disabled</option><option value='1'"));
+  if (autoCalibrationMode == 1) client.print(F(" selected"));
+  client.println(F(">Enabled</option></select>"
 #if defined(TOUCH_SENSOR_MTCH2120)
-  client.print(F("</option><option value='1'"));
-  if (autoCalibrationMode == 1) client.print(F(" selected"));
-  client.println(F(">Enabled</option></select><p class='help-text'>MTCH2120 AutoTune baseline tracking. Leave enabled unless troubleshooting.</p></div>"));
+    "<p class='help-text'>MTCH2120 AutoTune baseline tracking. Leave enabled unless troubleshooting.</p>"
 #else
-  client.print(F(" (Autoconfig off)</option><option value='1'"));
-  if (autoCalibrationMode == 1) client.print(F(" selected"));
-  client.println(F(">Enabled (Adafruit autoconfig)</option></select><p class='help-text'>Toggles the built-in autoconfig for baselines. Disabled leaves power-up defaults (NOT RECOMENDED).</p></div>"));
+    "<p class='help-text'>Toggles the built-in autoconfig for baselines. Disabled leaves power-up defaults.</p>"
 #endif
+    "</div>"));
 
   client.print(F("<div class='form-group'><label>Touch Threshold</label><input type='number' name='touchThreshold' value='"));
   client.print(touchThreshold);
+  client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive"
 #if defined(TOUCH_SENSOR_MTCH2120)
-  client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive (MTCH2120 default: 128)</p></div>"));
+    " (default: 128)"
+#else
+    " (default: 12)"
+#endif
+    "</p></div>"));
 
+#if defined(TOUCH_SENSOR_MTCH2120)
   client.print(F("<div class='form-group'><label>Hysteresis</label><input type='number' name='releaseThreshold' value='"));
   client.print(releaseThreshold);
-  client.println(F("' min='0' max='7'><p class='help-text'>MTCH2120 HYS code (0-7). 1 = ~25% (default), higher = stickier releases.</p></div>"
-    "<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>"
-    "<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>"
-    "</form></div></div>"));
+  client.println(F("' min='0' max='7'><p class='help-text'>MTCH2120 HYS code (0-7). 1 = ~25% (default), higher = stickier releases.</p></div>"));
 #else
-  client.println(F("' min='1' max='255'><p class='help-text'>Higher values = less sensitive (default: 12)</p></div>"));
-
   client.print(F("<div class='form-group'><label>Release Threshold</label><input type='number' name='releaseThreshold' value='"));
   client.print(releaseThreshold);
-  client.println(F("' min='1' max='255'><p class='help-text'>Lower values = harder to release (default: 6)</p></div>"
+  client.println(F("' min='1' max='255'><p class='help-text'>Lower values = harder to release (default: 6)</p></div>"));
+#endif
+
+  client.println(F(
     "<button type='submit' class='btn btn-primary btn-block'>Save Touch Settings</button>"
     "<p class='help-text' style='margin-top: 12px; color: red;'>Do not touch faders while saving</p>"
     "</form></div></div>"));
-#endif
 
   waitForWriteSpace(800);
   client.println(F("</div>")); // container
@@ -1357,7 +1356,11 @@ void handleRoot() {
 }
 
 void waitForWriteSpace(size_t minBytes) {
-  while (client.connected() && client.availableForWrite() < minBytes) {
+  while (client.connected()) {
+    int available = client.availableForWrite();
+    if (available < 0 || static_cast<size_t>(available) >= minBytes) {
+      break;
+    }
     Ethernet.loop();
     delay(1);
   }

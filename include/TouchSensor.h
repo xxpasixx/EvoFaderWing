@@ -7,7 +7,7 @@
 #include "Config.h"
 
 #if defined(TOUCH_SENSOR_MTCH2120)
-#include <MTCH2120.h>
+#include "MTCH2120.h"
 #elif defined(TOUCH_SENSOR_MPR121)
 #include <Adafruit_MPR121.h>
 #else
@@ -18,22 +18,10 @@
 // TOUCH SENSOR CONFIGURATION
 //================================
 
-// Debounce time (in milliseconds)
-#define TOUCH_CONFIRM_MS 30
-#define RELEASE_CONFIRM_MS 30
-
-// Register addresses for MPR121 auto-calibration settings
-#define MPR121_MHDR         0x2B    // Maximum Half Delta Rising
-#define MPR121_NHDR         0x2C    // Noise Half Delta Rising
-#define MPR121_NCLR         0x2D    // Noise Count Limit Rising
-#define MPR121_FDLR         0x2E    // Filter Delay Rising
-#define MPR121_MHDF         0x2F    // Maximum Half Delta Falling
-#define MPR121_NHDF         0x30    // Noise Half Delta Falling
-#define MPR121_NCLF         0x31    // Noise Count Limit Falling
-#define MPR121_FDLF         0x32    // Filter Delay Falling
-#define MPR121_NHDT         0x33    // Noise Half Delta Touched
-#define MPR121_NCLT         0x34    // Noise Count Touched
-#define MPR121_FDLT         0x35    // Filter Delay Touched
+// Backup poll interval to catch missed IRQs and clear release debound (ms)
+#define TOUCH_BACKUP_POLL_MS 150
+// Release debounce time (ms) applied after a raw release is seen (hold touched a little longer for the fader to stablize before release)
+#define RELEASE_DEBOUNCE_MS 150
 
 //================================
 // ERROR HANDLING CONSTANTS
@@ -75,9 +63,9 @@ void updateTouchTiming(int i, bool newTouchState);
 
 // Calibration functions
 void manualTouchCalibration();
+void runTouchCalibration();
 void setAutoTouchCalibration(int mode);
 void configureAutoCalibration();
-void recalibrateBaselines();
 
 // Error handling functions
 void handleTouchError();
