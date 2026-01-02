@@ -69,30 +69,65 @@ String getParam(String data, const char* key) {
 //================================
 //Upload without pressing button, using python script, takes one second try
 void checkSerialForReboot() {
-    if (Serial.available()) {
-        String cmd = Serial.readStringUntil('\n');
-        cmd.trim(); // Remove any whitespace/newlines
-        
-        if (cmd == "REBOOT_BOOTLOADER") {
-            Serial.println("[REBOOT] Command received. Entering bootloader...");
-            Serial.flush(); // Important: ensure message is sent before reboot
-            delay(100);
+    static String commandBuffer = "";
+    
+    // Read all available characters and buffer them
+    while (Serial.available()) {
+        char c = Serial.read();
+        if (c == '\n' || c == '\r') {
+            // End of command received, process it
+            commandBuffer.trim(); // Remove any whitespace
+            String cmd = commandBuffer;
+            commandBuffer = ""; // Clear buffer for next command
             
-            // This is the correct method for ALL Teensy models
-            _reboot_Teensyduino_();
-            
-        } else if (cmd == "REBOOT_NORMAL") {
-            Serial.println("[REBOOT] Normal reboot requested...");
-            Serial.flush();
-            delay(100);
-            
-            // Normal restart using ARM AIRCR register
-            resetTeensy();
-            
+            // Process the complete command
+            if (cmd.length() > 0) {
+                processSerialCommand(cmd);
+            }
+            return;
         } else {
-            Serial.print("[REBOOT] Unknown command: ");
-            Serial.println(cmd);
+            // Add character to buffer
+            commandBuffer += c;
         }
+    }
+}
+
+// Send identiy so we can update a specific teensy when more than one is plugged in, used with teensy_auto_upload_multi.py
+void processSerialCommand(String cmd) {
+    if (cmd == "IDENTIFY") {
+        Serial.print("[IDENT] ");
+        Serial.print(PROJECT_NAME);
+        Serial.print(" v");
+        Serial.println(SW_VERSION);
+        Serial.flush();
+        
+    } else if (cmd == "REBOOT_BOOTLOADER") {
+        Serial.print("[REBOOT] ");
+        Serial.print(PROJECT_NAME);
+        Serial.print(" v");
+        Serial.print(SW_VERSION);
+        Serial.println(" entering bootloader...");
+        Serial.flush(); // Important: ensure message is sent before reboot
+        delay(100);
+        
+        // This is the correct method for ALL Teensy models
+        _reboot_Teensyduino_();
+        
+    } else if (cmd == "REBOOT_NORMAL") {
+        Serial.print("[REBOOT] ");
+        Serial.print(PROJECT_NAME);
+        Serial.print(" v");
+        Serial.print(SW_VERSION);
+        Serial.println(" normal reboot requested...");
+        Serial.flush();
+        delay(100);
+        
+        // Normal restart using ARM AIRCR register
+        resetTeensy();
+        
+    } else {
+        Serial.print("[REBOOT] Unknown command: ");
+        Serial.println(cmd);
     }
 }
 

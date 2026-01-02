@@ -20,9 +20,9 @@ static const uint16_t EXEC_LED_START[NUM_EXECUTORS_TRACKED] = {
   // 201-210
   40, 42, 44, 46, 48, 50, 52, 54, 56, 58,
   // 301-310 (reversed)
-  38, 36, 34, 32, 30, 28, 26, 24, 22, 20,
+  38, 36, 34, 32, 32, 32, 32, 32, 32, 32,
   // 401-410 (top row)
-  0, 2, 4, 6, 8, 10, 12, 14, 16, 18
+  0, 3, 6, 9, 13, 18, 21, 24, 27, 30
 };
 
 static uint32_t buildExecColor(int execIndex, uint8_t brightness) {

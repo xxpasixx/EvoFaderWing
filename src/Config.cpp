@@ -18,12 +18,12 @@ const uint8_t ANALOG_PINS[NUM_FADERS] = {14, 15, 16, 17, 20, 21, 22, 23, 24, 25}
 const uint8_t PWM_PINS[NUM_FADERS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
 //USE 12 for NEOPIXEL
-//USE 13 for MRP121
+//USE 41 for MRP121/MTCH2120 IRQ
 //USE 18 (SDA), 19(SCL) for I2C
 
 // Motor direction control pins — each fader has two pins for H-bridge control.
 const uint8_t DIR_PINS1[NUM_FADERS] = {26, 28, 30, 32, 34, 36, 38, 40, 10, 51};
-const uint8_t DIR_PINS2[NUM_FADERS] = {27, 29, 31, 33, 35, 37, 39, 41, 11, 52};
+const uint8_t DIR_PINS2[NUM_FADERS] = {27, 29, 31, 33, 35, 37, 39, 13, 11, 52};
 
 // Unique OSC IDs for each fader (used to construct OSC address strings).
 const uint16_t OSC_IDS[NUM_FADERS] = {201, 202, 203, 204, 205, 206, 207, 208, 209, 210};
@@ -95,10 +95,15 @@ bool calibrationInProgress = false;
 //================================
 // TOUCH SENSOR GLOBALS
 //================================
-// These are used by the MPR121 driver and web UI configuration.
-int autoCalibrationMode = 1;     // 0 = Off, 1 = Autoconfig enabled
-uint8_t touchThreshold = 12;     // Higher = less sensitive
-uint8_t releaseThreshold = 6;    // Lower = harder to release
+// These are used by the touch driver and web UI configuration.
+int autoCalibrationMode = 1;      // 0 = AutoTune off, 1 = AutoTune on
+#if defined(TOUCH_SENSOR_MTCH2120)
+uint8_t touchThreshold = 128;     // Higher = less sensitive (MTCH2120 per-key threshold)
+uint8_t releaseThreshold = 1;     // Hysteresis code 0-7
+#else
+uint8_t touchThreshold = 12;      // Higher = less sensitive (MPR121 default)
+uint8_t releaseThreshold = 6;     // Lower = harder to release (MPR121 default)
+#endif
 
 
 // Page Tracking

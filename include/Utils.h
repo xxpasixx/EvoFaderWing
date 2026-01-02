@@ -18,7 +18,7 @@ void debugPrintf(const char* format, ...);
 // UPLOAD FUNCTION
 //================================
 void checkSerialForReboot();   //Allow us to upload without pressing physical button
-
+void processSerialCommand(String cmd);
 
 //================================
 // IP ADDRESS UTILITIES

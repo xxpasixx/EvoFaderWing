@@ -204,22 +204,47 @@ void loadTouchConfig() {
     
     // Load configuration
     EEPROM.get(EEPROM_TOUCH_DATA_ADDR, touchConfig);
-    
-    // Clamp to valid range in case older values were stored
-    if (touchConfig.autoCalibrationMode < 0) {
-      touchConfig.autoCalibrationMode = 0;
-    } else if (touchConfig.autoCalibrationMode > 1) {
-      touchConfig.autoCalibrationMode = 1;
+
+    bool normalized = false;
+
+    // Clamp to valid range in case older values were stored or sensor type changed
+    autoCalibrationMode = constrain(touchConfig.autoCalibrationMode, 0, 1);
+    if (autoCalibrationMode != touchConfig.autoCalibrationMode) {
+      normalized = true;
     }
-    
+
+    uint8_t normalizedTouchThreshold = constrain(touchConfig.touchThreshold, 1, 255);
+    uint8_t normalizedReleaseThreshold = touchConfig.releaseThreshold;
+
+#if defined(TOUCH_SENSOR_MTCH2120)
+    normalizedReleaseThreshold = constrain(normalizedReleaseThreshold, 0, 7);  // HYS code 0-7
+#else
+    normalizedReleaseThreshold = constrain(normalizedReleaseThreshold, 1, 255);
+    if (normalizedTouchThreshold < 2) {
+      normalizedTouchThreshold = 2;  // Keep room for release < touch
+      normalized = true;
+    }
+    if (normalizedReleaseThreshold >= normalizedTouchThreshold) {
+      normalizedReleaseThreshold = normalizedTouchThreshold - 1;
+      normalized = true;
+    }
+#endif
+
+    if (normalizedTouchThreshold != touchConfig.touchThreshold ||
+        normalizedReleaseThreshold != touchConfig.releaseThreshold) {
+      normalized = true;
+    }
+
     // Apply loaded values to the global variables
-    autoCalibrationMode = touchConfig.autoCalibrationMode;
-    touchThreshold = touchConfig.touchThreshold;
-    releaseThreshold = touchConfig.releaseThreshold;
+    touchThreshold = normalizedTouchThreshold;
+    releaseThreshold = normalizedReleaseThreshold;
     
     debugPrint("Touch sensor configuration loaded from EEPROM.");
+    if (normalized) {
+      debugPrint("Touch config normalized for active touch controller.");
+    }
     
-    // Apply loaded settings to the sensor
+    // Apply loaded settings to the sensor (no calibration here; run separately after faders are parked)
     setAutoTouchCalibration(autoCalibrationMode);
   } else {
     debugPrint("No valid touch configuration in EEPROM, using defaults.");
@@ -324,11 +349,16 @@ void resetToDefaults() {
   
   // Reset touch settings
   autoCalibrationMode = 1;
+#if defined(TOUCH_SENSOR_MTCH2120)
+  touchThreshold = 128;
+  releaseThreshold = 1;
+#else
   touchThreshold = 12;
   releaseThreshold = 6;
+#endif
   
   setAutoTouchCalibration(autoCalibrationMode);
-  manualTouchCalibration();
+  runTouchCalibration();
   
   // Keep runtime debug flag in sync with defaults
   debugMode = Fconfig.serialDebug;
@@ -460,7 +490,7 @@ void dumpEepromConfig() {
     
     debugPrintf("Auto Calibration Mode: %d\n", touchConfig.autoCalibrationMode);
     debugPrintf("Touch Threshold: %d\n", touchConfig.touchThreshold);
-    debugPrintf("Release Threshold: %d\n", touchConfig.releaseThreshold);
+    debugPrintf("Hysteresis Code: %d\n", touchConfig.releaseThreshold);
   } else {
     debugPrintf("Touch config not found (signature=0x%02X, expected=0x%02X)\n",
                EEPROM.read(EEPROM_TOUCH_SIGNATURE_ADDR), TOUCHCFG_EEPROM_SIGNATURE);

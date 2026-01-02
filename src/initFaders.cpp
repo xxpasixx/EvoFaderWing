@@ -22,7 +22,11 @@ void initializeFaders() {
     faders[i].minVal = 10;    // Keep default range small to avoid not being able to hit 0 and 100 percent
     faders[i].maxVal = 245;  // we might lose a little precision but its better
     faders[i].setpoint = 0;
+    faders[i].motorEnabled = true;
+    faders[i].failureCount = 0;
+    faders[i].lastFailureTime = 0;
     faders[i].lastReportedValue = -1;
+    faders[i].lastAnalogValue = -1;
     faders[i].lastOscSendTime = 0;
     faders[i].oscID = OSC_IDS[i];
     
@@ -62,6 +66,7 @@ void configureFaderPins() {
   for (int i = 0; i < NUM_FADERS; i++) {
     Fader& f = faders[i];
     pinMode(f.pwmPin, OUTPUT);
+    analogWriteFrequency(f.pwmPin,PWM_FREQ); // Configure PWM frequency for each pin (some pins use the same FlexPWM group, just set them all)
     pinMode(f.dirPin1, OUTPUT);
     pinMode(f.dirPin2, OUTPUT);
   
@@ -82,6 +87,13 @@ void configureFaderPins() {
 void calibrateFaders() {
   debugPrintf("Calibration started at PWM: %d\n", Fconfig.calibratePwm);
   calibrationInProgress = true;
+
+  // Re-enable any faders that were previously disabled due to movement failures
+  for (int i = 0; i < NUM_FADERS; i++) {
+    faders[i].motorEnabled = true;
+    faders[i].failureCount = 0;
+    faders[i].lastFailureTime = 0;
+  }
   
   // Store original colors before calibration
   uint8_t originalColors[NUM_FADERS][3];
@@ -135,7 +147,7 @@ void calibrateFaders() {
       delay(10);
       
       pollWebServer();  // Allow web UI to remain responsive
-      yield();          // Let MPR121 and Ethernet process in background
+      yield();          // Let touch sensor and Ethernet process in background
       
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
@@ -177,7 +189,7 @@ void calibrateFaders() {
       delay(10);
 
       pollWebServer();  // Allow web UI to remain responsive
-      yield();          // Let MPR121 and Ethernet process in background
+      yield();          // Let touch sensor and Ethernet process in background
       
       // If we reach this point with required plateau count, calibration succeeded
       if (plateau >= PLATEAU_COUNT) {
@@ -210,7 +222,7 @@ void calibrateFaders() {
       }
     }
 
-    bool faderFailed = !maxCalibrationSuccess || !minCalibrationSuccess || !rangeValid;
+    //bool faderFailed = !maxCalibrationSuccess || !minCalibrationSuccess || !rangeValid;
 
     if (maxCalibrationSuccess && minCalibrationSuccess && rangeValid) {
       debugPrintf("→ Calibration Done: Min=%d Max=%d\n", f.minVal, f.maxVal);

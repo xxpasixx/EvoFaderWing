@@ -18,6 +18,14 @@ static bool FaderMoveActive = false;
 
 
 void driveMotorWithPWM(Fader& f, int direction, int pwmValue) {
+  if (!f.motorEnabled) {
+    // Keep motor off when disabled
+    digitalWrite(f.dirPin1, LOW);
+    digitalWrite(f.dirPin2, LOW);
+    analogWrite(f.pwmPin, 0);
+    return;
+  }
+
   if (direction == 0) {
     // Stop the motor
     digitalWrite(f.dirPin1, LOW);
@@ -105,6 +113,12 @@ void moveAllFadersToSetpoints() {
 
     for (int i = 0; i < NUM_FADERS; i++) {
       Fader& f = faders[i];
+
+      if (!f.motorEnabled) {
+        // Disabled motors are treated as parked; ensure power is off
+        driveMotorWithPWM(f, 0, 0);
+        continue;
+      }
       
       // Read current position as OSC value
       int currentOscValue = readFadertoOSC(f);
@@ -139,26 +153,33 @@ void moveAllFadersToSetpoints() {
 
     }
     
-    // Small delay to prevent overwhelming the system
-    delay(1);
+    // Yield to prevent overwhelming the system
+    yield();
     
     // Add timeout protection to prevent infinite loops
 
     if (millis() - moveStartTime > FADER_MOVE_TIMEOUT) {
       // Stop all motors and flash red on faders that didn't reach target
       bool failed[NUM_FADERS] = {false};
+      bool retryNeeded = false;
       uint8_t origColors[NUM_FADERS][3] = {{0}};
       uint8_t scaledRed = (uint8_t)((255UL * Fconfig.touchedBrightness) / 255UL);
 
       for (int i = 0; i < NUM_FADERS; i++) {
-        driveMotorWithPWM(faders[i], 0, 0);
-        int currentOscValue = readFadertoOSC(faders[i]);
-        int difference = faders[i].setpoint - currentOscValue;
-        if (abs(difference) > Fconfig.targetTolerance && !faders[i].touched) {
+        Fader& f = faders[i];
+        driveMotorWithPWM(f, 0, 0);
+
+        if (!f.motorEnabled) {
+          continue;
+        }
+
+        int currentOscValue = readFadertoOSC(f);
+        int difference = f.setpoint - currentOscValue;
+        if (abs(difference) > Fconfig.targetTolerance && !f.touched) {
           failed[i] = true;
-          origColors[i][0] = faders[i].red;
-          origColors[i][1] = faders[i].green;
-          origColors[i][2] = faders[i].blue;
+          origColors[i][0] = f.red;
+          origColors[i][1] = f.green;
+          origColors[i][2] = f.blue;
         }
       }
 
@@ -183,20 +204,60 @@ void moveAllFadersToSetpoints() {
         delay(50);
       }
       
-      // Set retry flag - Todo: Set a max retry, maybe a failed fader flag and visual feedback of failed fader all red leds?
-      FaderRetryPending = true;
-      FaderRetryTime = millis() + RETRY_INTERVAL;
+      // Track failures and disable motors that repeatedly time out
+      unsigned long failureTime = millis();
+      for (int i = 0; i < NUM_FADERS; i++) {
+        if (!failed[i]) {
+          continue;
+        }
+
+        Fader& f = faders[i];
+        f.failureCount++;
+        f.lastFailureTime = failureTime;
+
+        if (f.failureCount >= FADER_MAX_FAILURES) {
+          f.motorEnabled = false;
+          f.red = 255;
+          f.green = 0;
+          f.blue = 0;
+          if (faderDebug) {
+            debugPrintf("Fader %d disabled after %u consecutive failures\n", f.oscID, f.failureCount);
+          }
+        } else {
+          retryNeeded = true;
+        }
+      }
+      
+      // Set retry flag for remaining enabled faders that still need movement
+      if (retryNeeded) {
+        FaderRetryPending = true;
+        FaderRetryTime = millis() + RETRY_INTERVAL;
+      } else {
+        FaderRetryPending = false;
+      }
       
       if (faderDebug) {
-        debugPrintf("Fader movement timeout - will retry in %lu seconds\n", RETRY_INTERVAL/1000);
+        if (retryNeeded) {
+          debugPrintf("Fader movement timeout - will retry in %lu seconds\n", RETRY_INTERVAL/1000);
+        } else {
+          debugPrint("Fader movement timeout - disabling stuck fader(s) with no retry");
+        }
       }
       break;
     }
 
   }
   
-  if (allFadersAtTarget && faderDebug) {
-    debugPrintf("All faders have reached their setpoints\n");
+  if (allFadersAtTarget) {
+    for (int i = 0; i < NUM_FADERS; i++) {
+      if (faders[i].motorEnabled) {
+        faders[i].failureCount = 0;
+      }
+    }
+    FaderRetryPending = false;
+    if (faderDebug) {
+      debugPrintf("All faders have reached their setpoints\n");
+    }
   }
   FaderMoveActive = false;
 }
@@ -257,6 +318,17 @@ void handleFaders() {
 // Read fader analog pin and return OSC value (0-100) using fader's calibrated range, with clamping at both ends
 int readFadertoOSC(Fader& f) {
   int analogValue = analogRead(f.analogPin);
+
+  // Suppress tiny jitter in the raw reading to avoid 0/1 flicker in OSC
+  if (f.lastAnalogValue >= 0) {
+    if (abs(analogValue - f.lastAnalogValue) <= ANALOG_NOISE_TOLERANCE) {
+      analogValue = f.lastAnalogValue;
+    } else {
+      f.lastAnalogValue = analogValue;
+    }
+  } else {
+    f.lastAnalogValue = analogValue;
+  }
 
   // Clamp near-bottom analog values to force OSC = 0
   if (analogValue <= f.minVal + 4) {

@@ -7,6 +7,7 @@
 #include "ExecutorStatus.h"
 #include "KeyLedControl.h"
 #include <AsyncUDP_Teensy41.h>
+#include <string.h>
 
 
 //================================
@@ -17,34 +18,90 @@ AsyncUDP oscUdp;
 
 bool faderColorDebug = false;
 
+//================================
+// OSC QUEUE (keeps UDP callback short)
+//================================
+
+static constexpr size_t OSC_MAX_PACKET_SIZE = 1536;     // Max bytes we will accept per packet (covers worst-case color/int bundles with margin)
+static constexpr size_t OSC_QUEUE_DEPTH = 12;           // Number of packets buffered
+static constexpr uint8_t OSC_MAX_PACKETS_PER_LOOP = 4;  // Process this many packets per loop iteration
+static constexpr uint32_t OSC_PROCESS_BUDGET_US = 8000; // Stop processing if we exceed this budget in micro seconds
+
+struct OscQueueItem {
+  uint16_t len;
+  uint32_t arrivalMs;
+  uint8_t data[OSC_MAX_PACKET_SIZE];
+};
+
+static OscQueueItem oscQueue[OSC_QUEUE_DEPTH];
+static volatile uint8_t oscQueueHead = 0;
+static volatile uint8_t oscQueueTail = 0;
+static volatile uint8_t oscQueueCount = 0;
+static volatile uint32_t oscQueueDrops = 0;
+static volatile uint32_t oscOversizeDrops = 0;
+
 // Forward declarations for async callbacks
 void handleBundledExecutorUpdate(LiteOSCParser& parser);
 void handleColorUpdate(LiteOSCParser& parser);
+static void handleOscPacket(const uint8_t* data, size_t len);
+static bool enqueueOscPacket(const uint8_t* data, size_t len);
+static bool dequeueOscPacket(OscQueueItem& out);
 
 //================================
 // NETWORK SETUP
 //================================
 
+static bool enqueueOscPacket(const uint8_t* data, size_t len) {
+  if (len > OSC_MAX_PACKET_SIZE) {
+    oscOversizeDrops++;
+    return false;
+  }
+
+  bool queued = false;
+  noInterrupts();
+  if (oscQueueCount < OSC_QUEUE_DEPTH) {
+    OscQueueItem& slot = oscQueue[oscQueueHead];
+    slot.len = static_cast<uint16_t>(len);
+    slot.arrivalMs = millis();
+    memcpy(slot.data, data, len);
+    oscQueueHead = (oscQueueHead + 1) % OSC_QUEUE_DEPTH;
+    oscQueueCount++;
+    queued = true;
+  } else {
+    oscQueueDrops++;
+  }
+  interrupts();
+  return queued;
+}
+
+static bool dequeueOscPacket(OscQueueItem& out) {
+  bool hasPacket = false;
+  noInterrupts();
+  if (oscQueueCount > 0) {
+    out = oscQueue[oscQueueTail];
+    oscQueueTail = (oscQueueTail + 1) % OSC_QUEUE_DEPTH;
+    oscQueueCount--;
+    hasPacket = true;
+  }
+  interrupts();
+  return hasPacket;
+}
+
 static void attachUdpHandler() {
   oscUdp.onPacket([](AsyncUDPPacket &packet) {
     const uint8_t* data = packet.data();
-    size_t len = packet.length();
-    LiteOSCParser parser;
+    const size_t len = packet.length();
 
-    if (!parser.parse(data, len)) {
-      debugPrint("Invalid OSC message.");
-      return;
-    }
-
-    const char* addr = parser.getAddress();
-
-    if (strstr(addr, "/execUpdate") != NULL) {
-      handleBundledExecutorUpdate(parser);
-    } else if (strstr(addr, "/colorUpdate") != NULL) {
-      handleColorUpdate(parser);
-    } else if (strstr(addr, "/updatePage/current") != NULL) {
-      if (parser.getTag(0) == 'i') {
-        handlePageUpdate(addr, parser.getInt(0));
+    if (!enqueueOscPacket(data, len)) {
+      static uint32_t lastDropPrint = 0;
+      const uint32_t now = millis();
+      if (now - lastDropPrint > 500) { // rate-limit debug spam
+        if (len > OSC_MAX_PACKET_SIZE) {
+          debugPrintf("[OSC] Drop oversize packet %u bytes (max %u)", len, OSC_MAX_PACKET_SIZE);
+        } else {
+          debugPrintf("[OSC] Queue full (%u/%u) dropping incoming packet", oscQueueCount, OSC_QUEUE_DEPTH);
+        }
+        lastDropPrint = now;
       }
     }
   });
@@ -109,6 +166,62 @@ void restartUDP() {
 //================================
 //OSC MESSAGE HANDLING
 //================================
+
+static void handleOscPacket(const uint8_t* data, size_t len) {
+  LiteOSCParser parser;
+
+  if (!parser.parse(data, len)) {
+    debugPrint("Invalid OSC message.");
+    return;
+  }
+
+  const char* addr = parser.getAddress();
+
+  if (strstr(addr, "/execUpdate") != NULL) {
+    handleBundledExecutorUpdate(parser);
+  } else if (strstr(addr, "/colorUpdate") != NULL) {
+    handleColorUpdate(parser);
+  } else if (strstr(addr, "/updatePage/current") != NULL) {
+    if (parser.getTag(0) == 'i') {
+      handlePageUpdate(addr, parser.getInt(0));
+    }
+  }
+}
+
+// Pull queued packets from the UDP callback and process a few each loop.
+void processOscQueue() {
+  uint8_t processed = 0;
+  elapsedMicros budget;
+  OscQueueItem pkt{};
+
+  while (processed < OSC_MAX_PACKETS_PER_LOOP && dequeueOscPacket(pkt)) {
+    handleOscPacket(pkt.data, pkt.len);
+    processed++;
+
+    if (budget >= OSC_PROCESS_BUDGET_US) {
+      break;
+    }
+  }
+
+  static uint32_t lastDropLog = 0;
+  const uint32_t now = millis();
+  if ((oscQueueDrops || oscOversizeDrops) && (now - lastDropLog > 1000)) {
+    uint32_t drops = 0;
+    uint32_t oversize = 0;
+    uint8_t depth = 0;
+
+    noInterrupts();
+    drops = oscQueueDrops;
+    oversize = oscOversizeDrops;
+    depth = oscQueueCount;
+    oscQueueDrops = 0;
+    oscOversizeDrops = 0;
+    interrupts();
+
+    debugPrintf("[OSC] queue drops=%lu oversize=%lu depth=%u", drops, oversize, depth);
+    lastDropLog = now;
+  }
+}
 
 // Page update message handling
 void handlePageUpdate(const char *address, int value) {

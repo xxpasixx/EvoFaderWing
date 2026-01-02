@@ -46,7 +46,7 @@ void setup() {
   initializeFaders();
   configureFaderPins();
   
-  // Initialize Touch MPR121 
+  // Initialize touch sensor (MTCH2120)
   if (!setupTouch()) {
     debugPrint("Touch sensor init failed!");
   }
@@ -62,6 +62,8 @@ void setup() {
   loadAllConfig();
 
   moveAllFadersToSetpoints();
+  // Calibrate touch sensor once faders are parked at center
+  runTouchCalibration();
 
   //Setup I2C Slaves so we can also check for network reset
   setupI2cPolling();
@@ -102,12 +104,12 @@ void loop() {
   // Handle I2C Polling for encoders keypresses and encoder key press
   handleI2c();
 
+  // Process queued OSC packets from UDP callback
+  processOscQueue();
+  
     
   // Process touch changes 
-  if (processTouchChanges()) {
-    updateBrightnessOnFaderTouchChange();
-    printFaderTouchStates();                //verbose debug output
-  }
+  if (processTouchChanges()) { updateBrightnessOnFaderTouchChange(); }
 
   // Check for web requests
   pollWebServer();

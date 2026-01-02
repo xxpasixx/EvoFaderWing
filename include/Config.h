@@ -6,24 +6,32 @@
 #include <IPAddress.h>
 
 //================================
+// IDENTITY
+//================================
+#define PROJECT_NAME "EvoFaderWing"
+#define SW_VERSION      "0.3.1"
+
+//================================
 // HARDWARE CONFIGURATION
 //================================
-#define SW_VERSION      "0.3"
 
 // Fader configuration
 #define NUM_FADERS      10       // Total number of motorized faders
 #define SERIAL_BAUD     115200   // Baud rate for USB serial output/debug
 
 // Motor control settings THE PWM DEFAULTS ARE SET FOR A 12V PSU, is you use the correct 10v psu you will need to adjust them
-#define MAX_PWM     150      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100-150
+#define MAX_PWM        150      // Default motor speed (PWM duty cycle) during normal operation (0–255) BEST at 100-150
 #define CALIB_PWM       80       // Reduced motor speed during auto-calibration phase
 #define MIN_PWM         40       // Minimum PWM to overcome motor inertia 
+#define PWM_FREQ     25000      // Frequency of the motors PWM output 25khz
 #define FADER_MOVE_TIMEOUT     2000   // Time in MS a fader must not be moving before force stopped
 #define RETRY_INTERVAL         1000    // How long before trying to move a stuck fader
+#define FADER_MAX_FAILURES       3     // Consecutive timeouts before disabling a fader motor
 
 // Fader position tolerances
 #define TARGET_TOLERANCE 1       // OSC VALUE How close the fader must be to setpoint to consider "done"
 #define SEND_TOLERANCE   2       // Amout of change in OSC (0-100) before senind an osc update
+#define ANALOG_NOISE_TOLERANCE 1 // Suppress tiny ADC jitter (counts) before mapping to OSC (current default set for 8bit reads)
 #define SLOW_ZONE        25      // OSC units - start slowing earlier for smoother approach
 #define FAST_ZONE        60      // OSC units - when to use full speed
 
@@ -50,8 +58,24 @@
 #define EXECUTOR_ACTIVE_BRIGHTNESS 80 // Default brightness for active/on keys (unpopulated stays dark)
 
 // Touch sensor configuration
-#define IRQ_PIN 13
+#if defined(TOUCH_SENSOR_MTCH2120) && defined(TOUCH_SENSOR_MPR121)
+#error "Select only one touch sensor: TOUCH_SENSOR_MTCH2120 or TOUCH_SENSOR_MPR121"
+#endif
+
+// Default to MTCH2120
+#if !defined(TOUCH_SENSOR_MTCH2120) && !defined(TOUCH_SENSOR_MPR121)
+#define TOUCH_SENSOR_MTCH2120 1
+#endif
+
+#define IRQ_PIN 41
+
+#ifndef MTCH2120_ADDRESS
+#define MTCH2120_ADDRESS 0x20
+#endif
+
+#ifndef MPR121_ADDRESS
 #define MPR121_ADDRESS 0x5A
+#endif
 
 //================================
 // PIN ASSIGNMENTS
@@ -127,9 +151,9 @@ struct ExecConfig {
 
 // Touch sensor configuration
 struct TouchConfig {
-  uint8_t autoCalibrationMode;  // 0=disabled, 1=enabled (autoconfig)
-  uint8_t touchThreshold;       // Default 12, higher = less sensitive
-  uint8_t releaseThreshold;     // Default 6, lower = harder to release
+  uint8_t autoCalibrationMode;  // 0=AutoTune off, 1=AutoTune on
+  uint8_t touchThreshold;       // Per-key threshold (higher = less sensitive)
+  uint8_t releaseThreshold;     // MTCH: hysteresis code 0-7, MPR121: release threshold 1-255
   uint8_t reserved[5];          // Reserved space for future touch parameters (unused for now)
 };
 
@@ -146,6 +170,9 @@ struct Fader {
   int maxVal;               // Calibrated analog max
 
   uint8_t setpoint;          // Target position
+  bool motorEnabled;        // Motor state (can be disabled after repeated failures)
+  uint8_t failureCount;     // Consecutive failures to reach target
+  unsigned long lastFailureTime; // Timestamp of last failure
 
   uint8_t lastReportedValue;    // Last value printed or sent
   uint8_t lastSentOscValue;     // Last value sent via OSC
@@ -153,7 +180,8 @@ struct Fader {
   unsigned long lastOscSendTime; // Time of last OSC message
 
   uint16_t oscID;           // OSC ID like 201 for /Page2/Fader201
-  
+  int lastAnalogValue;      // Last raw analog reading to suppress small jitter
+
 
   // Color variables
   uint8_t red;           // Red component (0-255)
