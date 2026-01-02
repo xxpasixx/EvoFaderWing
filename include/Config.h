@@ -67,7 +67,7 @@
 #define TOUCH_SENSOR_MTCH2120 1
 #endif
 
-#define IRQ_PIN 41
+#define IRQ_PIN 13
 
 #ifndef MTCH2120_ADDRESS
 #define MTCH2120_ADDRESS 0x20
